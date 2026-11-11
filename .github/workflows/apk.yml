@@ -1,0 +1,54 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+
+      - name: Armar el proyecto Flutter
+        run: |
+          mkdir app && cd app
+          flutter create --org com.nexlia --project-name phone --platforms android .
+          cp -r ../lib/* lib/
+          cp ../android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          mkdir -p android/app/src/main/kotlin/com/nexlia/phone
+          cp ../android/kotlin/*.kt android/app/src/main/kotlin/com/nexlia/phone/
+          cp -r ../android/res/* android/app/src/main/res/
+          rm -f test/widget_test.dart
+          sed -i 's/flutter\.minSdkVersion/29/' android/app/build.gradle*
+          # Firma fija: asi cada APK nuevo se instala encima del anterior.
+          mkdir -p ~/.android
+          cp ../android/firma/debug.keystore ~/.android/debug.keystore
+
+      - name: Compilar
+        working-directory: app
+        run: |
+          flutter build apk --release \
+            --build-name=1.0.${{ github.run_number }} \
+            --build-number=${{ github.run_number }}
+          cp build/app/outputs/flutter-apk/app-release.apk ../NEXLIA.apk
+
+      - name: Publicar
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v1.0.${{ github.run_number }}
+          name: NEXLIA 1.0.${{ github.run_number }}
+          files: NEXLIA.apk
