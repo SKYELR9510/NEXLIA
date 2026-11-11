@@ -42,25 +42,6 @@ foreach ($g in @("$Destino\android\app\build.gradle.kts", "$Destino\android\app\
     }
 }
 
-# Misma firma que los APK publicados en GitHub, para poder actualizar encima.
-Copy-Item "$origen\android\firma\debug.keystore" "$Destino\android\app\nexlia.keystore" -Force
-$kts = "$Destino\android\app\build.gradle.kts"
-if ((Test-Path $kts) -and -not ((Get-Content $kts -Raw) -match "nexlia.keystore")) {
-    Add-Content $kts @"
-
-android {
-    signingConfigs {
-        getByName("debug") {
-            storeFile = file("nexlia.keystore")
-            storePassword = "android"
-            keyAlias = "androiddebugkey"
-            keyPassword = "android"
-        }
-    }
-}
-"@
-}
-
 Write-Host "4/4 Descargando dependencias ..."
 flutter pub get
 
