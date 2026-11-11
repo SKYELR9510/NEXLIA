@@ -7,15 +7,16 @@ import 'call_screen.dart';
 import 'common.dart';
 import 'contacts_page.dart';
 import 'keypad_page.dart';
+import 'more_page.dart';
 import 'native.dart';
 import 'recents_page.dart';
-import 'spam_page.dart';
 
 final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await AppTheme.load();
   runApp(const PhoneApp());
 }
 
@@ -24,12 +25,21 @@ class PhoneApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return CupertinoApp(
-      navigatorKey: navKey,
-      debugShowCheckedModeBanner: false,
-      title: 'NEXLIA',
-      theme: const CupertinoThemeData(primaryColor: CupertinoColors.systemBlue),
-      home: const Home(),
+    return AnimatedBuilder(
+      animation: Listenable.merge([AppTheme.mode, AppTheme.accent]),
+      builder: (context, _) {
+        final m = AppTheme.mode.value;
+        return CupertinoApp(
+          navigatorKey: navKey,
+          debugShowCheckedModeBanner: false,
+          title: 'NEXLIA',
+          theme: CupertinoThemeData(
+            brightness: m == 1 ? Brightness.light : (m == 2 ? Brightness.dark : null),
+            primaryColor: AppTheme.accents[AppTheme.accent.value],
+          ),
+          home: const Home(),
+        );
+      },
     );
   }
 }
@@ -42,8 +52,8 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> with WidgetsBindingObserver {
-  int tab = 3;
   StreamSubscription<Map<dynamic, dynamic>>? sub;
+  bool splash = true;
 
   @override
   void initState() {
@@ -51,6 +61,10 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     sub = Native.events.listen(onEvent);
     AppData.i.addListener(_changed);
+    homeTab.addListener(_changed);
+    Timer(const Duration(milliseconds: 1400), () {
+      if (mounted) setState(() => splash = false);
+    });
     init();
   }
 
@@ -70,11 +84,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     if (e['type'] == 'dial') {
       dialText.value = (e['number'] ?? '').toString();
       navKey.currentState?.popUntil((r) => r.isFirst);
-      if (mounted) setState(() => tab = 3);
+      homeTab.value = 0;
       return;
     }
     final state = e['state'];
     if (state != null && state != 'none' && state != 'disconnected') {
+      if (mounted && splash) setState(() => splash = false);
       CallScreen.show(navKey, e);
     }
   }
@@ -88,6 +103,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     AppData.i.removeListener(_changed);
+    homeTab.removeListener(_changed);
     sub?.cancel();
     super.dispose();
   }
@@ -95,6 +111,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.of(context).padding.bottom;
+    final tab = homeTab.value;
     return CupertinoPageScaffold(
       backgroundColor: bgColor(context),
       child: Stack(
@@ -108,12 +125,12 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   Expanded(
                     child: IndexedStack(
                       index: tab,
-                      children: [
-                        const FavoritesPage(),
-                        const RecentsPage(),
-                        const ContactsPage(),
-                        const KeypadPage(),
-                        SpamPage(active: tab == 4),
+                      children: const [
+                        KeypadPage(),
+                        ContactsPage(),
+                        RecentsPage(),
+                        VoicemailPage(),
+                        MorePage(),
                       ],
                     ),
                   ),
@@ -122,22 +139,33 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
             ),
           ),
           Positioned(
-            left: 14,
-            right: 14,
-            bottom: bottom + 10,
-            child: Glass(
-              radius: 36,
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-                child: Row(
-                  children: [
-                    _tabItem(0, CupertinoIcons.star_fill, 'Favoritos'),
-                    _tabItem(1, CupertinoIcons.clock_fill, 'Recientes'),
-                    _tabItem(2, CupertinoIcons.person_crop_circle_fill, 'Contactos'),
-                    _tabItem(3, CupertinoIcons.circle_grid_3x3_fill, 'Teclado'),
-                    _tabItem(4, CupertinoIcons.shield_lefthalf_fill, 'Spam'),
-                  ],
-                ),
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: EdgeInsets.only(bottom: bottom, top: 6),
+              decoration: BoxDecoration(
+                color: bgColor(context),
+                border: Border(top: BorderSide(color: separatorColor(context), width: 0.6)),
+              ),
+              child: Row(
+                children: [
+                  _tabItem(0, CupertinoIcons.phone_fill, 'Teléfono'),
+                  _tabItem(1, CupertinoIcons.person_fill, 'Contactos'),
+                  _tabItem(2, CupertinoIcons.clock_fill, 'Recientes'),
+                  _tabItem(3, CupertinoIcons.recordingtape, 'Buzón'),
+                  _tabItem(4, CupertinoIcons.line_horizontal_3, 'Más'),
+                ],
+              ),
+            ),
+          ),
+          Positioned.fill(
+            child: IgnorePointer(
+              ignoring: !splash,
+              child: AnimatedOpacity(
+                opacity: splash ? 1 : 0,
+                duration: const Duration(milliseconds: 350),
+                child: const _Splash(),
               ),
             ),
           ),
@@ -147,34 +175,66 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
   }
 
   Widget _tabItem(int index, IconData icon, String text) {
-    final on = tab == index;
-    final color = on ? CupertinoColors.systemBlue.resolveFrom(context) : secondaryColor(context);
+    final on = homeTab.value == index;
+    final color = on ? accentColor(context) : secondaryColor(context);
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
           HapticFeedback.selectionClick();
-          setState(() => tab = index);
+          homeTab.value = index;
         },
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 7),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(30),
-            color: on ? fillColor(context) : const Color(0x00000000),
-          ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 23, color: color),
-              const SizedBox(height: 2),
+              Icon(icon, size: 24, color: color),
+              const SizedBox(height: 3),
               Text(text,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: color)),
+                  style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: on ? FontWeight.w700 : FontWeight.w500,
+                      color: color)),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _Splash extends StatelessWidget {
+  const _Splash();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF0A2A6E), Color(0xFF030814), Color(0xFF0B3FA8)],
+          stops: [0, 0.55, 1],
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Image.asset('assets/icon.png', width: 150, height: 150),
+          const SizedBox(height: 26),
+          const Text('NEXLIA',
+              style: TextStyle(
+                  color: Color(0xFFFFFFFF),
+                  fontSize: 44,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2)),
+          const SizedBox(height: 6),
+          const Text('Conecta mejor', style: TextStyle(color: Color(0xCCFFFFFF), fontSize: 18)),
+          const SizedBox(height: 60),
+        ],
       ),
     );
   }
@@ -196,7 +256,7 @@ class _DefaultBanner extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              'Para recibir llamadas y bloquear spam, esta app debe ser tu Teléfono predeterminado.',
+              'Para recibir llamadas y bloquear spam, NEXLIA debe ser tu Teléfono predeterminado.',
               style: TextStyle(fontSize: 13, color: labelColor(context)),
             ),
           ),

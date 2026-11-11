@@ -86,7 +86,7 @@ class _CallScreenState extends State<CallScreen> {
   String get _status {
     switch (st['state']) {
       case 'ringing':
-        return 'Llamada entrante';
+        return 'Llamada entrante…';
       case 'dialing':
         return 'Llamando…';
       case 'holding':
@@ -122,16 +122,26 @@ class _CallScreenState extends State<CallScreen> {
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
                 end: Alignment.bottomRight,
-                colors: [Color(0xFF1B2A41), Color(0xFF0B0F17), Color(0xFF14231C)],
+                colors: [Color(0xFF0A2A6E), Color(0xFF040A18), Color(0xFF0B2F7A)],
+                stops: [0, 0.55, 1],
               ),
             ),
             child: SafeArea(
               child: Column(
                 children: [
-                  const SizedBox(height: 56),
+                  const SizedBox(height: 40),
                   Text(_status,
-                      style: const TextStyle(fontSize: 19, color: Color(0xB3FFFFFF))),
-                  const SizedBox(height: 8),
+                      style: TextStyle(
+                          fontSize: state == 'active' ? 24 : 18,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xE6FFFFFF))),
+                  const SizedBox(height: 22),
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0x33FFFFFF)),
+                    child: Avatar(name, size: 132),
+                  ),
+                  const SizedBox(height: 18),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 24),
                     child: FittedBox(
@@ -139,8 +149,8 @@ class _CallScreenState extends State<CallScreen> {
                       child: Text(title,
                           maxLines: 1,
                           style: const TextStyle(
-                              fontSize: 38,
-                              fontWeight: FontWeight.w600,
+                              fontSize: 32,
+                              fontWeight: FontWeight.w700,
                               color: CupertinoColors.white)),
                     ),
                   ),
@@ -172,7 +182,7 @@ class _CallScreenState extends State<CallScreen> {
                         children: [
                           _round(CupertinoIcons.phone_down_fill, const Color(0xFFFF3B30), 'Rechazar',
                               Native.hangup),
-                          _round(CupertinoIcons.phone_fill, const Color(0xFF34C759), 'Contestar',
+                          _round(CupertinoIcons.phone_fill, const Color(0xFF1FC24A), 'Aceptar',
                               Native.answer),
                         ],
                       ),

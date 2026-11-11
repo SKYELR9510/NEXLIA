@@ -13,6 +13,7 @@ class RecentsPage extends StatefulWidget {
 
 class _RecentsPageState extends State<RecentsPage> {
   int filter = 0;
+  String query = '';
 
   Future<void> _actions(CallEntry e, Contact? contact) async {
     final number = e.number;
@@ -72,20 +73,16 @@ class _RecentsPageState extends State<RecentsPage> {
     );
   }
 
-  String _kind(CallEntry e) {
-    switch (e.type) {
+  bool _match(CallEntry e) {
+    switch (filter) {
       case 1:
-        return 'Entrante';
+        return e.missed;
       case 2:
-        return 'Saliente';
+        return e.type == 1;
       case 3:
-        return 'Perdida';
-      case 5:
-        return 'Rechazada';
-      case 6:
-        return 'Bloqueada';
+        return e.type == 2;
       default:
-        return 'Llamada';
+        return true;
     }
   }
 
@@ -94,113 +91,155 @@ class _RecentsPageState extends State<RecentsPage> {
     return AnimatedBuilder(
       animation: AppData.i,
       builder: (context, _) {
-        final all = AppData.i.calls;
-        final list = filter == 0 ? all : all.where((c) => c.missed).toList();
-        final red = CupertinoColors.systemRed.resolveFrom(context);
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
+        final q = query.toLowerCase();
+        final qd = digits(query);
+        final list = AppData.i.calls.where((e) {
+          if (!_match(e)) return false;
+          if (q.isEmpty) return true;
+          final name = (AppData.i.contactFor(e.number)?.name ?? e.name).toLowerCase();
+          return name.contains(q) || (qd.isNotEmpty && digits(e.number).contains(qd));
+        }).toList();
+        const red = Color(0xFFFF3B30);
+        const green = Color(0xFF12B83C);
+        const labels = ['Todas', 'Perdidas', 'Entrantes', 'Salientes'];
+        return Stack(
           children: [
-            const LargeTitle('Recientes'),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-              child: CupertinoSlidingSegmentedControl<int>(
-                groupValue: filter,
-                children: const {
-                  0: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Todas')),
-                  1: Padding(padding: EdgeInsets.symmetric(vertical: 6), child: Text('Perdidas')),
-                },
-                onValueChanged: (v) => setState(() => filter = v ?? 0),
-              ),
-            ),
-            Expanded(
-              child: list.isEmpty
-                  ? Center(
-                      child: Text('Sin llamadas recientes',
-                          style: TextStyle(color: secondaryColor(context), fontSize: 17)))
-                  : ListView.builder(
-                      padding: EdgeInsets.only(top: 6, bottom: barSpace(context)),
-                      itemCount: list.length,
-                      itemBuilder: (context, i) {
-                        final e = list[i];
-                        final contact = e.number.isEmpty ? null : AppData.i.contactFor(e.number);
-                        final name = contact?.name ??
-                            (e.name.isNotEmpty
-                                ? e.name
-                                : (e.number.isEmpty ? 'Número oculto' : e.number));
-                        return GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: e.number.isEmpty ? null : () => callNumber(context, e.number),
-                          onLongPress: () => _actions(e, contact),
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Row(
-                              children: [
-                                Avatar(contact?.name ?? e.name, size: 42),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 9),
-                                    decoration: BoxDecoration(
-                                        border: Border(
-                                            bottom: BorderSide(
-                                                color: separatorColor(context), width: 0.4))),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
-                                          child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
-                                            children: [
-                                              Text(name,
-                                                  maxLines: 1,
-                                                  overflow: TextOverflow.ellipsis,
-                                                  style: TextStyle(
-                                                      fontSize: 17,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: e.missed ? red : labelColor(context))),
-                                              const SizedBox(height: 2),
-                                              Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const ScreenTitle('Recientes'),
+                SearchPill(
+                    placeholder: 'Buscar en historial…',
+                    onChanged: (v) => setState(() => query = v.trim())),
+                SizedBox(
+                  height: 40,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: labels.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) => Center(
+                      child: Pill(labels[i],
+                          selected: filter == i, onTap: () => setState(() => filter = i)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Expanded(
+                  child: list.isEmpty
+                      ? Center(
+                          child: Text('Sin llamadas',
+                              style: TextStyle(color: secondaryColor(context), fontSize: 17)))
+                      : ListView.builder(
+                          padding: EdgeInsets.only(bottom: barSpace(context) + 70),
+                          itemCount: list.length,
+                          itemBuilder: (context, i) {
+                            final e = list[i];
+                            final contact =
+                                e.number.isEmpty ? null : AppData.i.contactFor(e.number);
+                            final name = contact?.name ??
+                                (e.name.isNotEmpty
+                                    ? e.name
+                                    : (e.number.isEmpty ? 'Número oculto' : e.number));
+                            final IconData icon = e.missed
+                                ? CupertinoIcons.xmark
+                                : (e.type == 2
+                                    ? CupertinoIcons.arrow_up_right
+                                    : CupertinoIcons.arrow_down_left);
+                            final Color iconColor =
+                                e.missed ? red : (e.type == 2 ? secondaryColor(context) : green);
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () {
+                                if (contact != null) {
+                                  openContact(context, contact);
+                                } else {
+                                  _actions(e, contact);
+                                }
+                              },
+                              onLongPress: () => _actions(e, contact),
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 16),
+                                child: Row(
+                                  children: [
+                                    Avatar(contact?.name ?? e.name, size: 46),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(vertical: 10),
+                                        decoration: BoxDecoration(
+                                            border: Border(
+                                                bottom: BorderSide(
+                                                    color: separatorColor(context), width: 0.6))),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
-                                                  Icon(
-                                                      e.type == 2
-                                                          ? CupertinoIcons.phone_fill_arrow_up_right
-                                                          : CupertinoIcons.phone_fill_arrow_down_left,
-                                                      size: 13,
-                                                      color: secondaryColor(context)),
-                                                  const SizedBox(width: 4),
-                                                  Text(_kind(e),
+                                                  Text(name,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
                                                       style: TextStyle(
-                                                          fontSize: 14, color: secondaryColor(context))),
+                                                          fontSize: 17,
+                                                          fontWeight: FontWeight.w600,
+                                                          color: labelColor(context))),
+                                                  const SizedBox(height: 3),
+                                                  Row(
+                                                    children: [
+                                                      Icon(icon, size: 14, color: iconColor),
+                                                      const SizedBox(width: 6),
+                                                      Text(formatWhenLong(e.date),
+                                                          style: TextStyle(
+                                                              fontSize: 14,
+                                                              color: secondaryColor(context))),
+                                                    ],
+                                                  ),
                                                 ],
                                               ),
-                                            ],
-                                          ),
+                                            ),
+                                            if (e.number.isNotEmpty)
+                                              CupertinoButton(
+                                                padding: const EdgeInsets.symmetric(horizontal: 16),
+                                                minSize: 40,
+                                                onPressed: () => callNumber(context, e.number),
+                                                child: const Icon(CupertinoIcons.phone_fill, size: 24),
+                                              ),
+                                          ],
                                         ),
-                                        Text(formatWhen(e.date),
-                                            style: TextStyle(fontSize: 15, color: secondaryColor(context))),
-                                        CupertinoButton(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                                          minSize: 36,
-                                          onPressed: () {
-                                            if (contact != null) {
-                                              Navigator.of(context, rootNavigator: true).push(
-                                                  CupertinoPageRoute<void>(
-                                                      builder: (_) => ContactDetail(contact: contact)));
-                                            } else {
-                                              _actions(e, contact);
-                                            }
-                                          },
-                                          child: const Icon(CupertinoIcons.info_circle, size: 23),
-                                        ),
-                                      ],
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    ),
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+            Positioned(
+              right: 18,
+              bottom: barSpace(context) + 14,
+              child: GestureDetector(
+                onTap: () => homeTab.value = 0,
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: accentColor(context),
+                    boxShadow: [
+                      BoxShadow(
+                          color: accentColor(context).withOpacity(0.4),
+                          blurRadius: 14,
+                          offset: const Offset(0, 6)),
+                    ],
+                  ),
+                  child: const Icon(CupertinoIcons.circle_grid_3x3_fill,
+                      color: Color(0xFFFFFFFF), size: 24),
+                ),
+              ),
             ),
           ],
         );

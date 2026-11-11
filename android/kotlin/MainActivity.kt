@@ -12,6 +12,7 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.CallLog
 import android.provider.ContactsContract
+import android.provider.Settings
 import android.telecom.TelecomManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -162,6 +163,34 @@ class MainActivity : FlutterActivity() {
                 result.success(true)
             }
             "takeDialNumber" -> { result.success(dialNumber); dialNumber = null }
+            "getPref" -> result.success(
+                getSharedPreferences("ui", MODE_PRIVATE).getString(call.argument<String>("key") ?: "", null))
+            "setPref" -> {
+                getSharedPreferences("ui", MODE_PRIVATE).edit()
+                    .putString(call.argument<String>("key") ?: "", call.argument<String>("value")).apply()
+                result.success(true)
+            }
+            "getVersion" -> result.success(packageManager.getPackageInfo(packageName, 0).versionName ?: "")
+            "callVoicemail" -> {
+                if (!has(Manifest.permission.CALL_PHONE)) result.success(false)
+                else {
+                    getSystemService(TelecomManager::class.java)
+                        .placeCall(Uri.fromParts("voicemail", "", null), Bundle())
+                    result.success(true)
+                }
+            }
+            "openSettings" -> {
+                val i = when (call.argument<String>("which")) {
+                    "notifications" -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+                    "sound" -> Intent(Settings.ACTION_SOUND_SETTINGS)
+                    "sim" -> Intent(Settings.ACTION_WIRELESS_SETTINGS)
+                    "defaults" -> Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+                    else -> Intent(Settings.ACTION_SETTINGS)
+                }
+                try { startActivity(i) } catch (e: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
+                result.success(true)
+            }
             "getSpamData" -> result.success(SpamStore.allJson(this))
             "setSpamSettings" -> { SpamStore.saveSettings(this, call.argument<String>("json") ?: "{}"); result.success(true) }
             "setBlocked" -> { SpamStore.saveBlocked(this, call.argument<String>("json") ?: "[]"); result.success(true) }

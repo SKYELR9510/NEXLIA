@@ -128,6 +128,27 @@ class Native {
     return out;
   }
 
+  static Future<String?> getPref(String key) async {
+    try {
+      return await _ch.invokeMethod<String>('getPref', {'key': key});
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<bool> setPref(String key, String value) =>
+      _bool('setPref', {'key': key, 'value': value});
+  static Future<bool> callVoicemail() => _bool('callVoicemail');
+  static Future<bool> openSettings(String which) => _bool('openSettings', {'which': which});
+
+  static Future<String> getVersion() async {
+    try {
+      return await _ch.invokeMethod<String>('getVersion') ?? '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   // ---- Bloqueador de spam ----
 
   static Future<Map<String, dynamic>> getSpamData() async {

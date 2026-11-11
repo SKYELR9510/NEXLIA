@@ -32,6 +32,8 @@ jobs:
           mkdir -p android/app/src/main/kotlin/com/nexlia/phone
           cp ../android/kotlin/*.kt android/app/src/main/kotlin/com/nexlia/phone/
           cp -r ../android/res/* android/app/src/main/res/
+          mkdir -p assets && cp ../assets/* assets/
+          sed -i 's|^  uses-material-design: true|  uses-material-design: true\n  assets:\n    - assets/icon.png|' pubspec.yaml
           rm -f test/widget_test.dart
           sed -i 's/flutter\.minSdkVersion/29/' android/app/build.gradle*
           # Firma fija: asi cada APK nuevo se instala encima del anterior.

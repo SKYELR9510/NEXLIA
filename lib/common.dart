@@ -7,20 +7,134 @@ import 'native.dart';
 /// Número que se está escribiendo en el teclado (compartido entre pantallas).
 final ValueNotifier<String> dialText = ValueNotifier<String>('');
 
-/// Espacio que ocupa la barra flotante inferior, incluida la barra de navegación del sistema.
-double barSpace(BuildContext c) => 92 + MediaQuery.of(c).padding.bottom;
+/// Pestaña activa: 0 Teléfono, 1 Contactos, 2 Recientes, 3 Buzón, 4 Más.
+final ValueNotifier<int> homeTab = ValueNotifier<int>(0);
+
+/// Apariencia elegida por el usuario.
+class AppTheme {
+  /// 0 automático (sigue al teléfono), 1 claro, 2 oscuro.
+  static final ValueNotifier<int> mode = ValueNotifier<int>(0);
+  static final ValueNotifier<int> accent = ValueNotifier<int>(0);
+  static const List<Color> accents = [
+    Color(0xFF1466FF),
+    Color(0xFF0B3FA8),
+    Color(0xFF34436B),
+    Color(0xFF7C8DB5),
+  ];
+
+  static Future<void> load() async {
+    mode.value = int.tryParse(await Native.getPref('theme_mode') ?? '') ?? 0;
+    final a = int.tryParse(await Native.getPref('theme_accent') ?? '') ?? 0;
+    accent.value = a >= 0 && a < accents.length ? a : 0;
+  }
+
+  static void setMode(int m) {
+    mode.value = m;
+    Native.setPref('theme_mode', '$m');
+  }
+
+  static void setAccent(int a) {
+    accent.value = a;
+    Native.setPref('theme_accent', '$a');
+  }
+}
+
+/// Espacio que ocupa la barra inferior, incluida la barra de navegación del sistema.
+double barSpace(BuildContext c) => 62 + MediaQuery.of(c).padding.bottom;
 
 /// Encabezado y pie pequeños para las secciones agrupadas.
 Widget sectionLabel(BuildContext c, String text) => Text(text,
     style: TextStyle(
         fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0, color: secondaryColor(c)));
 
-Color bgColor(BuildContext c) => CupertinoColors.systemBackground.resolveFrom(c);
-Color groupedBg(BuildContext c) => CupertinoColors.systemGroupedBackground.resolveFrom(c);
-Color labelColor(BuildContext c) => CupertinoColors.label.resolveFrom(c);
-Color secondaryColor(BuildContext c) => CupertinoColors.secondaryLabel.resolveFrom(c);
-Color separatorColor(BuildContext c) => CupertinoColors.separator.resolveFrom(c);
-Color fillColor(BuildContext c) => CupertinoColors.tertiarySystemFill.resolveFrom(c);
+bool isDark(BuildContext c) => CupertinoTheme.brightnessOf(c) == Brightness.dark;
+Color accentColor(BuildContext c) => CupertinoTheme.of(c).primaryColor;
+Color bgColor(BuildContext c) => isDark(c) ? const Color(0xFF050A16) : const Color(0xFFFFFFFF);
+Color groupedBg(BuildContext c) => isDark(c) ? const Color(0xFF050A16) : const Color(0xFFF4F7FC);
+Color cardColor(BuildContext c) => isDark(c) ? const Color(0xFF101A2E) : const Color(0xFFFFFFFF);
+Color fillColor(BuildContext c) => isDark(c) ? const Color(0xFF16213A) : const Color(0xFFEAF0FA);
+Color labelColor(BuildContext c) => isDark(c) ? const Color(0xFFFFFFFF) : const Color(0xFF0B1B3A);
+Color secondaryColor(BuildContext c) => isDark(c) ? const Color(0xFF93A0BC) : const Color(0xFF5E6B85);
+Color separatorColor(BuildContext c) => isDark(c) ? const Color(0x22FFFFFF) : const Color(0x16000000);
+
+/// Botón tipo píldora para filtros y accesos.
+class Pill extends StatelessWidget {
+  const Pill(this.text, {super.key, required this.selected, required this.onTap});
+  final String text;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+        decoration: BoxDecoration(
+          color: selected ? accentColor(context) : fillColor(context),
+          borderRadius: BorderRadius.circular(22),
+        ),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: selected ? const Color(0xFFFFFFFF) : labelColor(context))),
+      ),
+    );
+  }
+}
+
+/// Título de pantalla con acción opcional a la derecha.
+class ScreenTitle extends StatelessWidget {
+  const ScreenTitle(this.text, {super.key, this.trailing});
+  final String text;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 8, 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(text,
+                style: TextStyle(
+                    fontSize: 26, fontWeight: FontWeight.w700, color: labelColor(context))),
+          ),
+          if (trailing != null) trailing! else const SizedBox(height: 44),
+        ],
+      ),
+    );
+  }
+}
+
+/// Campo de búsqueda redondeado.
+class SearchPill extends StatelessWidget {
+  const SearchPill({super.key, required this.placeholder, required this.onChanged});
+  final String placeholder;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+      child: CupertinoTextField(
+        placeholder: placeholder,
+        onChanged: onChanged,
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
+        prefix: Padding(
+          padding: const EdgeInsets.only(left: 14),
+          child: Icon(CupertinoIcons.search, size: 20, color: labelColor(context)),
+        ),
+        placeholderStyle: TextStyle(color: secondaryColor(context), fontSize: 16),
+        style: TextStyle(color: labelColor(context), fontSize: 16),
+        decoration:
+            BoxDecoration(color: fillColor(context), borderRadius: BorderRadius.circular(24)),
+      ),
+    );
+  }
+}
 
 String initials(String name) {
   final parts = name.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
@@ -46,6 +160,21 @@ String formatWhen(DateTime d) {
   return '${_two(d.day)}/${_two(d.month)}/${d.year % 100}';
 }
 
+String formatWhenLong(DateTime d) {
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  final diff = today.difference(DateTime(d.year, d.month, d.day)).inDays;
+  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  final t = '$h:${_two(d.minute)} ${d.hour < 12 ? 'a. m.' : 'p. m.'}';
+  if (diff == 0) return 'Hoy, $t';
+  if (diff == 1) return 'Ayer, $t';
+  if (diff < 7) {
+    const names = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+    return '${names[d.weekday - 1]}, $t';
+  }
+  return '${_two(d.day)}/${_two(d.month)}/${d.year % 100}';
+}
+
 String formatDuration(int seconds) {
   final m = seconds ~/ 60, s = seconds % 60;
   if (m >= 60) return '${m ~/ 60}:${_two(m % 60)}:${_two(s)}';
@@ -64,12 +193,12 @@ class Avatar extends StatelessWidget {
       width: size,
       height: size,
       alignment: Alignment.center,
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         shape: BoxShape.circle,
         gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFFA5ABB8), Color(0xFF858A96)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [accentColor(context).withOpacity(0.75), accentColor(context)],
         ),
       ),
       child: known

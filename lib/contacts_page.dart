@@ -16,7 +16,19 @@ class ContactsPage extends StatefulWidget {
 }
 
 class _ContactsPageState extends State<ContactsPage> {
+  static const double rowH = 58;
+  static const double favH = 150;
+  static const double titleH = 40;
+  static const letters = 'ABCDEFGHIJKLMNÑOPQRSTUVWXYZ#';
+
+  final ScrollController scroll = ScrollController();
   String query = '';
+
+  @override
+  void dispose() {
+    scroll.dispose();
+    super.dispose();
+  }
 
   Future<void> _add() async {
     final r = await askText(context, 'Nuevo contacto',
@@ -28,8 +40,17 @@ class _ContactsPageState extends State<ContactsPage> {
 
   String _letter(String name) {
     if (name.trim().isEmpty) return '#';
-    final ch = name.trim().characters.first.toUpperCase();
-    return RegExp(r'[A-ZÁÉÍÓÚÑ]').hasMatch(ch) ? ch : '#';
+    var ch = name.trim().characters.first.toUpperCase();
+    const map = {'Á': 'A', 'É': 'E', 'Í': 'I', 'Ó': 'O', 'Ú': 'U', 'Ü': 'U'};
+    ch = map[ch] ?? ch;
+    return RegExp(r'[A-ZÑ]').hasMatch(ch) ? ch : '#';
+  }
+
+  void _jump(String letter, List<Contact> list, double header) {
+    final i = list.indexWhere((c) => _letter(c.name) == letter);
+    if (i < 0 || !scroll.hasClients) return;
+    final target = header + i * rowH;
+    scroll.jumpTo(target.clamp(0.0, scroll.position.maxScrollExtent).toDouble());
   }
 
   @override
@@ -44,163 +65,186 @@ class _ContactsPageState extends State<ContactsPage> {
           if (c.name.toLowerCase().contains(q)) return true;
           return qd.isNotEmpty && c.numbers.any((n) => digits(n).contains(qd));
         }).toList();
-
-        final rows = <Widget>[];
-        String? last;
-        for (final c in list) {
-          final l = _letter(c.name);
-          if (l != last) {
-            last = l;
-            rows.add(Container(
-              width: double.infinity,
-              color: groupedBg(context),
-              padding: const EdgeInsets.fromLTRB(20, 4, 20, 4),
-              child: Text(l,
-                  style: TextStyle(
-                      fontSize: 15, fontWeight: FontWeight.w700, color: secondaryColor(context))),
-            ));
-          }
-          rows.add(GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => openContact(context, c),
-            child: Container(
-              margin: const EdgeInsets.only(left: 20),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              decoration: BoxDecoration(
-                  border: Border(bottom: BorderSide(color: separatorColor(context), width: 0.4))),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(c.name.isEmpty ? (c.numbers.isEmpty ? 'Sin nombre' : c.numbers.first) : c.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 17, color: labelColor(context))),
-                  ),
-                  if (c.starred)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 16),
-                      child: Icon(CupertinoIcons.star_fill,
-                          size: 14, color: CupertinoColors.systemYellow.resolveFrom(context)),
-                    ),
-                ],
-              ),
-            ),
-          ));
-        }
+        final favs = q.isEmpty ? AppData.i.contacts.where((c) => c.starred).toList() : <Contact>[];
+        final header = (favs.isEmpty ? 0.0 : favH) + titleH;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            LargeTitle('Contactos',
+            ScreenTitle('Contactos',
                 trailing: CupertinoButton(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
                   onPressed: _add,
-                  child: const Icon(CupertinoIcons.add, size: 26),
+                  child: const Icon(CupertinoIcons.add, size: 28),
                 )),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              child: CupertinoSearchTextField(
-                placeholder: 'Buscar',
-                onChanged: (v) => setState(() => query = v.trim()),
-              ),
-            ),
+            SearchPill(
+                placeholder: 'Buscar contactos…',
+                onChanged: (v) => setState(() => query = v.trim())),
             Expanded(
-              child: rows.isEmpty
-                  ? Center(
-                      child: Text(query.isEmpty ? 'Sin contactos' : 'Sin resultados',
-                          style: TextStyle(color: secondaryColor(context), fontSize: 17)))
-                  : ListView(
-                      padding: EdgeInsets.only(bottom: barSpace(context)),
-                      children: rows,
-                    ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class FavoritesPage extends StatelessWidget {
-  const FavoritesPage({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: AppData.i,
-      builder: (context, _) {
-        final favs = AppData.i.contacts.where((c) => c.starred).toList();
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const LargeTitle('Favoritos'),
-            Expanded(
-              child: favs.isEmpty
-                  ? Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 40),
-                        child: Text(
-                            'Abre un contacto y toca la estrella para tenerlo aquí.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: secondaryColor(context), fontSize: 17)),
-                      ),
-                    )
-                  : ListView.builder(
-                      padding: EdgeInsets.only(bottom: barSpace(context)),
-                      itemCount: favs.length,
-                      itemBuilder: (context, i) {
-                        final c = favs[i];
-                        return GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: c.numbers.isEmpty ? null : () => callNumber(context, c.numbers.first),
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: 16),
-                            child: Row(
+              child: Stack(
+                children: [
+                  CustomScrollView(
+                    controller: scroll,
+                    slivers: [
+                      if (favs.isNotEmpty)
+                        SliverToBoxAdapter(
+                          child: SizedBox(
+                            height: favH,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Avatar(c.name, size: 46),
-                                const SizedBox(width: 12),
+                                Padding(
+                                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                                  child: Text('Favoritos',
+                                      style: TextStyle(
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w700,
+                                          color: labelColor(context))),
+                                ),
                                 Expanded(
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 10),
-                                    decoration: BoxDecoration(
-                                        border: Border(
-                                            bottom: BorderSide(
-                                                color: separatorColor(context), width: 0.4))),
-                                    child: Row(
-                                      children: [
-                                        Expanded(
+                                  child: ListView.builder(
+                                    scrollDirection: Axis.horizontal,
+                                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                                    itemCount: favs.length,
+                                    itemBuilder: (context, i) {
+                                      final c = favs[i];
+                                      return GestureDetector(
+                                        behavior: HitTestBehavior.opaque,
+                                        onTap: () => openContact(context, c),
+                                        child: SizedBox(
+                                          width: 74,
                                           child: Column(
-                                            crossAxisAlignment: CrossAxisAlignment.start,
                                             children: [
-                                              Text(c.name,
+                                              Avatar(c.name, size: 58),
+                                              const SizedBox(height: 6),
+                                              Text(c.name.split(' ').first,
                                                   maxLines: 1,
                                                   overflow: TextOverflow.ellipsis,
                                                   style: TextStyle(
-                                                      fontSize: 17,
-                                                      fontWeight: FontWeight.w600,
-                                                      color: labelColor(context))),
-                                              Text(c.numbers.isEmpty ? '' : c.numbers.first,
-                                                  style: TextStyle(
-                                                      fontSize: 14, color: secondaryColor(context))),
+                                                      fontSize: 13, color: labelColor(context))),
                                             ],
                                           ),
                                         ),
-                                        CupertinoButton(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                                          minSize: 36,
-                                          onPressed: () => openContact(context, c),
-                                          child: const Icon(CupertinoIcons.info_circle, size: 23),
-                                        ),
-                                      ],
-                                    ),
+                                      );
+                                    },
                                   ),
                                 ),
                               ],
                             ),
                           ),
+                        ),
+                      SliverToBoxAdapter(
+                        child: SizedBox(
+                          height: titleH,
+                          child: Padding(
+                            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+                            child: Text(
+                                list.isEmpty
+                                    ? (query.isEmpty ? 'Sin contactos' : 'Sin resultados')
+                                    : 'Todos los contactos',
+                                style: TextStyle(
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w700,
+                                    color: labelColor(context))),
+                          ),
+                        ),
+                      ),
+                      SliverFixedExtentList(
+                        itemExtent: rowH,
+                        delegate: SliverChildBuilderDelegate(
+                          childCount: list.length,
+                          (context, i) {
+                            final c = list[i];
+                            return GestureDetector(
+                              behavior: HitTestBehavior.opaque,
+                              onTap: () => openContact(context, c),
+                              child: Padding(
+                                padding: const EdgeInsets.only(left: 18, right: 30),
+                                child: Row(
+                                  children: [
+                                    Avatar(c.name, size: 40),
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Container(
+                                        height: rowH,
+                                        alignment: Alignment.centerLeft,
+                                        decoration: BoxDecoration(
+                                            border: Border(
+                                                bottom: BorderSide(
+                                                    color: separatorColor(context), width: 0.6))),
+                                        child: Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                  c.name.isEmpty
+                                                      ? (c.numbers.isEmpty
+                                                          ? 'Sin nombre'
+                                                          : c.numbers.first)
+                                                      : c.name,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: TextStyle(
+                                                      fontSize: 17,
+                                                      fontWeight: FontWeight.w500,
+                                                      color: labelColor(context))),
+                                            ),
+                                            Icon(CupertinoIcons.chevron_right,
+                                                size: 16, color: secondaryColor(context)),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                      SliverToBoxAdapter(child: SizedBox(height: barSpace(context) + 8)),
+                    ],
+                  ),
+                  if (q.isEmpty && list.length > 12)
+                    Positioned(
+                      right: 2,
+                      top: 4,
+                      bottom: barSpace(context) + 4,
+                      child: LayoutBuilder(builder: (context, box) {
+                        void pick(double dy) {
+                          final i = (dy / box.maxHeight * letters.length)
+                              .floor()
+                              .clamp(0, letters.length - 1)
+                              .toInt();
+                          _jump(letters[i], list, header);
+                        }
+
+                        return GestureDetector(
+                          behavior: HitTestBehavior.opaque,
+                          onTapDown: (d) => pick(d.localPosition.dy),
+                          onVerticalDragUpdate: (d) => pick(d.localPosition.dy),
+                          child: SizedBox(
+                            width: 22,
+                            child: Column(
+                              children: [
+                                for (final l in letters.characters)
+                                  Expanded(
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(l,
+                                          style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: accentColor(context))),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         );
-                      },
+                      }),
                     ),
+                ],
+              ),
             ),
           ],
         );
@@ -305,23 +349,27 @@ class _ContactDetailState extends State<ContactDetail> {
                 ),
               ),
             CupertinoListSection.insetGrouped(
+            backgroundColor: const Color(0x00000000),
+            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
               children: [
                 for (final n in c.numbers)
                   CupertinoListTile(
                     title: Text('móvil', style: TextStyle(fontSize: 14, color: labelColor(context))),
                     subtitle: Text(n,
                         style: TextStyle(
-                            fontSize: 17, color: CupertinoColors.systemBlue.resolveFrom(context))),
+                            fontSize: 17, color: accentColor(context))),
                     onTap: () => callNumber(context, n),
                   ),
                 if (c.numbers.isEmpty) const CupertinoListTile(title: Text('Sin número')),
               ],
             ),
             CupertinoListSection.insetGrouped(
+            backgroundColor: const Color(0x00000000),
+            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
               children: [
                 CupertinoListTile(
                   title: Text(c.starred ? 'Quitar de favoritos' : 'Añadir a favoritos',
-                      style: TextStyle(color: CupertinoColors.systemBlue.resolveFrom(context))),
+                      style: TextStyle(color: accentColor(context))),
                   onTap: _toggleStar,
                 ),
                 if (c.numbers.isNotEmpty)

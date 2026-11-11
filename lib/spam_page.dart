@@ -17,7 +17,7 @@ const Map<String, dynamic> _defaults = {
 };
 
 class SpamPage extends StatefulWidget {
-  const SpamPage({super.key, required this.active});
+  const SpamPage({super.key, this.active = true});
   final bool active;
 
   @override
@@ -134,16 +134,24 @@ class _SpamPageState extends State<SpamPage> {
 
   @override
   Widget build(BuildContext context) {
-    final blue = CupertinoColors.systemBlue.resolveFrom(context);
+    final blue = accentColor(context);
     final online = s['onlineEnabled'] == true;
     final url = s['serverUrl'].toString();
-    return Container(
-      color: groupedBg(context),
-      child: ListView(
-        padding: EdgeInsets.only(bottom: barSpace(context)),
+    return CupertinoPageScaffold(
+      backgroundColor: groupedBg(context),
+      navigationBar: CupertinoNavigationBar(
+        middle: Text('Bloqueo de llamadas', style: TextStyle(color: labelColor(context))),
+        previousPageTitle: 'Más',
+        backgroundColor: groupedBg(context),
+        border: null,
+      ),
+      child: SafeArea(
+        child: ListView(
+        padding: const EdgeInsets.only(bottom: 24),
         children: [
-          const LargeTitle('Spam'),
           CupertinoListSection.insetGrouped(
+            backgroundColor: const Color(0x00000000),
+            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
             header: sectionLabel(context, 'NÚMEROS QUE NO ESTÁN EN TUS CONTACTOS'),
             footer: sectionLabel(context,
                 'Silenciar: la llamada entra sin sonar y queda en Recientes. Rechazar: se corta sola.'),
@@ -152,6 +160,8 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
           CupertinoListSection.insetGrouped(
+            backgroundColor: const Color(0x00000000),
+            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
             header: sectionLabel(context, 'PATRONES DE SPAM'),
             children: [
               _switch('Serie 500 (Perú)', 'Numeración oficial para llamadas comerciales', 'peru500'),
@@ -160,12 +170,16 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
           CupertinoListSection.insetGrouped(
+            backgroundColor: const Color(0x00000000),
+            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
             header: sectionLabel(context, 'QUÉ HACER CON EL SPAM DETECTADO'),
             children: [
               _segmented('spamAction', const {1: 'Silenciar', 2: 'Rechazar'}),
             ],
           ),
           CupertinoListSection.insetGrouped(
+            backgroundColor: const Color(0x00000000),
+            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
             header: sectionLabel(context, 'PREFIJOS BLOQUEADOS'),
             children: [
               for (final p in prefixes)
@@ -183,6 +197,8 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
           CupertinoListSection.insetGrouped(
+            backgroundColor: const Color(0x00000000),
+            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
             header: sectionLabel(context, 'NÚMEROS BLOQUEADOS'),
             children: [
               for (final n in blocked)
@@ -201,6 +217,8 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
           CupertinoListSection.insetGrouped(
+            backgroundColor: const Color(0x00000000),
+            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
             header: sectionLabel(context, 'BASE DE DATOS EN LÍNEA'),
             footer: sectionLabel(context,
                 'Consulta tu servidor antes de que suene cada llamada de un desconocido. '
@@ -256,6 +274,8 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
           CupertinoListSection.insetGrouped(
+            backgroundColor: const Color(0x00000000),
+            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
             header: sectionLabel(context, 'LLAMADAS FILTRADAS'),
             children: [
               if (log.isEmpty) const CupertinoListTile(title: Text('Aún no se ha filtrado ninguna')),
@@ -281,6 +301,7 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
         ],
+      ),
       ),
     );
   }
