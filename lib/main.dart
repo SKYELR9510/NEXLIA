@@ -54,6 +54,7 @@ class Home extends StatefulWidget {
 class _HomeState extends State<Home> with WidgetsBindingObserver {
   StreamSubscription<Map<dynamic, dynamic>>? sub;
   bool splash = true;
+  Map<dynamic, dynamic> callState = {'state': 'none'};
 
   @override
   void initState() {
@@ -62,6 +63,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     sub = Native.events.listen(onEvent);
     AppData.i.addListener(_changed);
     homeTab.addListener(_changed);
+    CallScreen.minimized.addListener(_changed);
     Timer(const Duration(milliseconds: 1400), () {
       if (mounted) setState(() => splash = false);
     });
@@ -88,9 +90,13 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       return;
     }
     final state = e['state'];
-    if (state != null && state != 'none' && state != 'disconnected') {
+    if (state == null) return;
+    if (mounted) setState(() => callState = e);
+    if (state != 'none' && state != 'disconnected') {
       if (mounted && splash) setState(() => splash = false);
       CallScreen.show(navKey, e);
+    } else {
+      CallScreen.minimized.value = false;
     }
   }
 
@@ -104,6 +110,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     AppData.i.removeListener(_changed);
     homeTab.removeListener(_changed);
+    CallScreen.minimized.removeListener(_changed);
     sub?.cancel();
     super.dispose();
   }
@@ -122,6 +129,30 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
               child: Column(
                 children: [
                   if (!AppData.i.isDefault) const _DefaultBanner(),
+                  if (CallScreen.minimized.value)
+                    GestureDetector(
+                      onTap: () => CallScreen.show(navKey, callState, force: true),
+                      child: Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        decoration: BoxDecoration(
+                            color: const Color(0xFF12B83C), borderRadius: BorderRadius.circular(16)),
+                        child: const Row(
+                          children: [
+                            Icon(CupertinoIcons.phone_fill, color: Color(0xFFFFFFFF), size: 18),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Text('Llamada en curso · toca para volver',
+                                  style: TextStyle(
+                                      color: Color(0xFFFFFFFF),
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   Expanded(
                     child: IndexedStack(
                       index: tab,

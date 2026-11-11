@@ -13,9 +13,15 @@ class CallScreen extends StatefulWidget {
 
   static bool _open = false;
 
-  static void show(GlobalKey<NavigatorState> nav, Map<dynamic, dynamic> state) {
+  /// La llamada sigue, pero el usuario salió a marcar otro número.
+  static final ValueNotifier<bool> minimized = ValueNotifier<bool>(false);
+
+  static void show(GlobalKey<NavigatorState> nav, Map<dynamic, dynamic> state,
+      {bool force = false}) {
     final n = nav.currentState;
-    if (_open || n == null) return;
+    final st = state['state'];
+    if (force || st == 'ringing' || st == 'dialing') minimized.value = false;
+    if (_open || n == null || minimized.value) return;
     _open = true;
     n
         .push(PageRouteBuilder<void>(
@@ -107,7 +113,9 @@ class _CallScreenState extends State<CallScreen> {
     final number = (st['number'] ?? '').toString();
     var name = (st['name'] ?? '').toString();
     if (name.isEmpty) name = AppData.i.contactFor(number)?.name ?? '';
-    final title = name.isNotEmpty ? name : (number.isEmpty ? 'Número oculto' : number);
+    final title = st['conference'] == true
+        ? 'Conferencia'
+        : (name.isNotEmpty ? name : (number.isEmpty ? 'Número oculto' : number));
     final spam = (st['spam'] ?? '').toString();
     final ringing = state == 'ringing';
     final ended = state == 'disconnected';
@@ -118,6 +126,8 @@ class _CallScreenState extends State<CallScreen> {
         child: AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle.light,
           child: Container(
+            width: double.infinity,
+            height: double.infinity,
             decoration: const BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topLeft,
@@ -230,57 +240,85 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  Widget _toggle(IconData icon, String text, bool on, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.selectionClick();
-        onTap();
-      },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            width: 74,
-            height: 74,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: on ? CupertinoColors.white : const Color(0x33FFFFFF),
-            ),
-            child: Icon(icon, size: 30, color: on ? const Color(0xFF000000) : CupertinoColors.white),
+  Widget _toggle(IconData icon, String text, bool on, VoidCallback? onTap) {
+    return Expanded(
+      child: Opacity(
+        opacity: onTap == null ? 0.35 : 1,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap == null
+              ? null
+              : () {
+                  HapticFeedback.selectionClick();
+                  onTap();
+                },
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: on ? CupertinoColors.white : const Color(0x2EFFFFFF),
+                ),
+                child: Icon(icon,
+                    size: 28, color: on ? const Color(0xFF0A2A6E) : CupertinoColors.white),
+              ),
+              const SizedBox(height: 8),
+              Text(text,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(color: CupertinoColors.white, fontSize: 13)),
+            ],
           ),
-          const SizedBox(height: 8),
-          Text(text, style: const TextStyle(color: CupertinoColors.white, fontSize: 13)),
-        ],
+        ),
       ),
     );
+  }
+
+  void _addCall() {
+    CallScreen.minimized.value = true;
+    homeTab.value = 0;
+    Navigator.of(context).pop();
   }
 
   Widget _controls() {
     final muted = st['muted'] == true;
     final speaker = st['speaker'] == true;
+    final bluetooth = st['bluetooth'] == true;
+    final btAvailable = st['btAvailable'] == true;
     final holding = st['state'] == 'holding';
+    final two = ((st['count'] as num?)?.toInt() ?? 1) >= 2 && st['conference'] != true;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 36),
+      padding: const EdgeInsets.symmetric(horizontal: 26),
       child: Column(
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _toggle(CupertinoIcons.speaker_3_fill, 'Altavoz', speaker,
-                  () => Native.setSpeaker(!speaker)),
               _toggle(CupertinoIcons.mic_slash_fill, 'Silenciar', muted,
                   () => Native.setMuted(!muted)),
               _toggle(CupertinoIcons.circle_grid_3x3_fill, 'Teclado', false,
                   () => setState(() => keypad = true)),
+              _toggle(CupertinoIcons.speaker_3_fill, 'Altavoz', speaker,
+                  () => Native.setSpeaker(!speaker)),
             ],
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 24),
           Row(
-            mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _toggle(CupertinoIcons.pause_fill, holding ? 'Reanudar' : 'En espera', holding,
-                  Native.toggleHold),
+              if (two)
+                _toggle(CupertinoIcons.arrow_merge, 'Unir', false, Native.mergeCalls)
+              else
+                _toggle(CupertinoIcons.add, 'Agregar', false, _addCall),
+              if (two)
+                _toggle(CupertinoIcons.arrow_swap, 'Cambiar', false, Native.swapCalls)
+              else
+                _toggle(CupertinoIcons.pause_fill, holding ? 'Reanudar' : 'En espera', holding,
+                    Native.toggleHold),
+              _toggle(CupertinoIcons.bluetooth, 'Bluetooth', bluetooth,
+                  btAvailable ? () => Native.setBluetooth(!bluetooth) : null),
             ],
           ),
         ],

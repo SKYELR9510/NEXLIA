@@ -69,7 +69,10 @@ object CallManager {
             "speaker" to (audio?.route == CallAudioState.ROUTE_SPEAKER),
             "connectTime" to (c.details?.connectTimeMillis ?: 0L),
             "spam" to (SpamEngine.lastReasons[SpamEngine.national(number)] ?: ""),
-            "count" to calls.size
+            "count" to calls.count { it.parent == null },
+            "conference" to (c.details?.hasProperty(Call.Details.PROPERTY_CONFERENCE) ?: false),
+            "bluetooth" to (audio?.route == CallAudioState.ROUTE_BLUETOOTH),
+            "btAvailable" to (((audio?.supportedRouteMask ?: 0) and CallAudioState.ROUTE_BLUETOOTH) != 0)
         )
     }
 
@@ -89,6 +92,20 @@ object CallManager {
         val c = current ?: return
         c.playDtmfTone(ch)
         main.postDelayed({ c.stopDtmfTone() }, 160)
+    }
+
+    /** Con dos llamadas: pasa a la que está en espera. */
+    fun swap() { calls.firstOrNull { it.state == Call.STATE_HOLDING }?.unhold() }
+
+    /** Con dos llamadas: las une en una conferencia (si el operador lo permite). */
+    fun merge() {
+        val active = calls.firstOrNull { it.state == Call.STATE_ACTIVE } ?: return
+        val held = calls.firstOrNull { it.state == Call.STATE_HOLDING } ?: return
+        active.conference(held)
+    }
+
+    fun setBluetooth(on: Boolean) {
+        service?.setAudioRoute(if (on) CallAudioState.ROUTE_BLUETOOTH else CallAudioState.ROUTE_WIRED_OR_EARPIECE)
     }
 
     fun setMuted(on: Boolean) { service?.setMuted(on) }

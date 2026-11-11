@@ -164,6 +164,9 @@ class MainActivity : FlutterActivity() {
             "toggleHold" -> { CallManager.toggleHold(); result.success(true) }
             "setMuted" -> { CallManager.setMuted(call.argument<Boolean>("on") == true); result.success(true) }
             "setSpeaker" -> { CallManager.setSpeaker(call.argument<Boolean>("on") == true); result.success(true) }
+            "swapCalls" -> { CallManager.swap(); result.success(true) }
+            "mergeCalls" -> { CallManager.merge(); result.success(true) }
+            "setBluetooth" -> { CallManager.setBluetooth(call.argument<Boolean>("on") == true); result.success(true) }
             "dtmf" -> {
                 val d = call.argument<String>("digit") ?: ""
                 if (d.isNotEmpty()) CallManager.dtmf(d[0])
