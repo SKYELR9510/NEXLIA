@@ -55,11 +55,11 @@ class KeypadPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, box) {
-      final avail = box.maxHeight - barSpace - 150;
+      final avail = box.maxHeight - barSpace(context) - 150;
       final d = math.max(54.0, math.min(84.0, math.min(avail / 5.9, box.maxWidth / 4.4)));
       final gap = d * 0.2;
       return Padding(
-        padding: const EdgeInsets.only(bottom: barSpace),
+        padding: EdgeInsets.only(bottom: barSpace(context)),
         child: Column(
           children: [
             Expanded(

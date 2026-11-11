@@ -118,7 +118,7 @@ class _RecentsPageState extends State<RecentsPage> {
                       child: Text('Sin llamadas recientes',
                           style: TextStyle(color: secondaryColor(context), fontSize: 17)))
                   : ListView.builder(
-                      padding: const EdgeInsets.only(top: 6, bottom: barSpace),
+                      padding: EdgeInsets.only(top: 6, bottom: barSpace(context)),
                       itemCount: list.length,
                       itemBuilder: (context, i) {
                         final e = list[i];

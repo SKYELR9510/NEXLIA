@@ -110,7 +110,7 @@ class _ContactsPageState extends State<ContactsPage> {
                       child: Text(query.isEmpty ? 'Sin contactos' : 'Sin resultados',
                           style: TextStyle(color: secondaryColor(context), fontSize: 17)))
                   : ListView(
-                      padding: const EdgeInsets.only(bottom: barSpace),
+                      padding: EdgeInsets.only(bottom: barSpace(context)),
                       children: rows,
                     ),
             ),
@@ -146,7 +146,7 @@ class FavoritesPage extends StatelessWidget {
                       ),
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: barSpace),
+                      padding: EdgeInsets.only(bottom: barSpace(context)),
                       itemCount: favs.length,
                       itemBuilder: (context, i) {
                         final c = favs[i];

@@ -13,7 +13,8 @@ import android.telecom.InCallService
 
 /** Android enlaza este servicio cuando la app es el Teléfono predeterminado. */
 class CallService : InCallService() {
-    private val channelId = "llamadas"
+    private val ringChannel = "entrantes"
+    private val ongoingChannel = "en_curso"
     private val notifId = 51
 
     override fun onCreate() {
@@ -21,9 +22,13 @@ class CallService : InCallService() {
         CallManager.appContext = applicationContext
         CallManager.service = this
         val nm = getSystemService(NotificationManager::class.java)
-        val ch = NotificationChannel(channelId, "Llamadas", NotificationManager.IMPORTANCE_HIGH)
-        ch.setSound(null, null) // el timbre lo pone el sistema
-        nm.createNotificationChannel(ch)
+        nm.deleteNotificationChannel("llamadas")
+        val ring = NotificationChannel(ringChannel, "Llamadas entrantes", NotificationManager.IMPORTANCE_HIGH)
+        ring.setSound(null, null) // el timbre lo pone el sistema
+        nm.createNotificationChannel(ring)
+        // Sin aviso emergente: la pantalla de llamada ya esta a la vista.
+        val ongoing = NotificationChannel(ongoingChannel, "Llamada en curso", NotificationManager.IMPORTANCE_LOW)
+        nm.createNotificationChannel(ongoing)
     }
 
     override fun onDestroy() {
@@ -71,7 +76,7 @@ class CallService : InCallService() {
         val open = PendingIntent.getActivity(
             this, 0, uiIntent(), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val b = Notification.Builder(this, channelId)
+        val b = Notification.Builder(this, if (state == "ringing") ringChannel else ongoingChannel)
             .setSmallIcon(android.R.drawable.stat_sys_phone_call)
             .setContentTitle(who)
             .setOngoing(true)

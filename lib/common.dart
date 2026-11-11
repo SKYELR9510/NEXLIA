@@ -7,8 +7,13 @@ import 'native.dart';
 /// Número que se está escribiendo en el teclado (compartido entre pantallas).
 final ValueNotifier<String> dialText = ValueNotifier<String>('');
 
-/// Espacio que ocupa la barra flotante inferior.
-const double barSpace = 104;
+/// Espacio que ocupa la barra flotante inferior, incluida la barra de navegación del sistema.
+double barSpace(BuildContext c) => 92 + MediaQuery.of(c).padding.bottom;
+
+/// Encabezado y pie pequeños para las secciones agrupadas.
+Widget sectionLabel(BuildContext c, String text) => Text(text,
+    style: TextStyle(
+        fontSize: 13, fontWeight: FontWeight.w400, letterSpacing: 0, color: secondaryColor(c)));
 
 Color bgColor(BuildContext c) => CupertinoColors.systemBackground.resolveFrom(c);
 Color groupedBg(BuildContext c) => CupertinoColors.systemGroupedBackground.resolveFrom(c);

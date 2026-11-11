@@ -140,19 +140,19 @@ class _SpamPageState extends State<SpamPage> {
     return Container(
       color: groupedBg(context),
       child: ListView(
-        padding: const EdgeInsets.only(bottom: barSpace),
+        padding: EdgeInsets.only(bottom: barSpace(context)),
         children: [
           const LargeTitle('Spam'),
           CupertinoListSection.insetGrouped(
-            header: const Text('NÚMEROS QUE NO ESTÁN EN TUS CONTACTOS'),
-            footer: const Text(
+            header: sectionLabel(context, 'NÚMEROS QUE NO ESTÁN EN TUS CONTACTOS'),
+            footer: sectionLabel(context,
                 'Silenciar: la llamada entra sin sonar y queda en Recientes. Rechazar: se corta sola.'),
             children: [
               _segmented('unknownMode', const {0: 'Permitir', 1: 'Silenciar', 2: 'Rechazar'}),
             ],
           ),
           CupertinoListSection.insetGrouped(
-            header: const Text('PATRONES DE SPAM'),
+            header: sectionLabel(context, 'PATRONES DE SPAM'),
             children: [
               _switch('Serie 500 (Perú)', 'Numeración oficial para llamadas comerciales', 'peru500'),
               _switch('Números ocultos', 'Llamadas privadas o sin número', 'blockHidden'),
@@ -160,13 +160,13 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
           CupertinoListSection.insetGrouped(
-            header: const Text('QUÉ HACER CON EL SPAM DETECTADO'),
+            header: sectionLabel(context, 'QUÉ HACER CON EL SPAM DETECTADO'),
             children: [
               _segmented('spamAction', const {1: 'Silenciar', 2: 'Rechazar'}),
             ],
           ),
           CupertinoListSection.insetGrouped(
-            header: const Text('PREFIJOS BLOQUEADOS'),
+            header: sectionLabel(context, 'PREFIJOS BLOQUEADOS'),
             children: [
               for (final p in prefixes)
                 CupertinoListTile(
@@ -183,7 +183,7 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
           CupertinoListSection.insetGrouped(
-            header: const Text('NÚMEROS BLOQUEADOS'),
+            header: sectionLabel(context, 'NÚMEROS BLOQUEADOS'),
             children: [
               for (final n in blocked)
                 CupertinoListTile(
@@ -201,8 +201,8 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
           CupertinoListSection.insetGrouped(
-            header: const Text('BASE DE DATOS EN LÍNEA'),
-            footer: const Text(
+            header: sectionLabel(context, 'BASE DE DATOS EN LÍNEA'),
+            footer: sectionLabel(context,
                 'Consulta tu servidor antes de que suene cada llamada de un desconocido. '
                 'Se bloquea cuando el número tiene al menos los reportes indicados.'),
             children: [
@@ -256,7 +256,7 @@ class _SpamPageState extends State<SpamPage> {
             ],
           ),
           CupertinoListSection.insetGrouped(
-            header: const Text('LLAMADAS FILTRADAS'),
+            header: sectionLabel(context, 'LLAMADAS FILTRADAS'),
             children: [
               if (log.isEmpty) const CupertinoListTile(title: Text('Aún no se ha filtrado ninguna')),
               for (final e in log.take(50))
