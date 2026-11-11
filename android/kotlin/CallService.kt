@@ -9,7 +9,10 @@ import android.content.Context
 import android.content.Intent
 import android.telecom.Call
 import android.telecom.CallAudioState
+import android.os.Handler
+import android.os.Looper
 import android.telecom.InCallService
+import android.telecom.TelecomManager
 
 /** Android enlaza este servicio cuando la app es el Teléfono predeterminado. */
 class CallService : InCallService() {
@@ -38,6 +41,37 @@ class CallService : InCallService() {
     }
 
     override fun onCallAdded(call: Call) {
+        val number = CallManager.numberOf(call)
+        val key = SpamEngine.national(number)
+        val screened = System.currentTimeMillis() - (SpamEngine.screenedAt[key] ?: 0L) < 20000
+        if (call.state != Call.STATE_RINGING || screened) {
+            show(call)
+            return
+        }
+        // Segundo filtro: si el sistema no consultó al bloqueador (pasa en algunos
+        // teléfonos), la llamada se evalúa aquí antes de mostrarla.
+        val ctx = applicationContext
+        Thread {
+            val d = try { SpamEngine.evaluate(ctx, number) } catch (e: Exception) { Decision(SpamStore.ALLOW, "") }
+            if (d.action != SpamStore.ALLOW) {
+                SpamEngine.lastReasons[key] = d.reason
+                SpamStore.addLog(ctx, number, d.reason, d.action)
+            } else SpamEngine.lastReasons.remove(key)
+            Handler(Looper.getMainLooper()).post {
+                when (d.action) {
+                    SpamStore.REJECT -> try { call.reject(false, null) } catch (e: Exception) { show(call) }
+                    SpamStore.SILENCE -> {
+                        try { getSystemService(TelecomManager::class.java).silenceRinger() } catch (e: Exception) { }
+                        show(call)
+                    }
+                    else -> show(call)
+                }
+            }
+        }.start()
+    }
+
+    private fun show(call: Call) {
+        if (call.state == Call.STATE_DISCONNECTED) return
         CallManager.add(call)
         try {
             startActivity(uiIntent())

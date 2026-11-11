@@ -69,6 +69,9 @@ object SpamEngine {
     /** Motivo de la última decisión por número, para mostrarlo en la pantalla de llamada. */
     val lastReasons = HashMap<String, String>()
 
+    /** Momento en que el filtro del sistema ya evaluó cada número (para no evaluar dos veces). */
+    val screenedAt = HashMap<String, Long>()
+
     /** Número en formato nacional peruano: solo dígitos, sin +51. */
     fun national(raw: String): String {
         val t = raw.trim()
@@ -220,6 +223,7 @@ class SpamScreeningService : CallScreeningService() {
         Thread {
             val d = try { SpamEngine.evaluate(ctx, number) } catch (e: Exception) { Decision(SpamStore.ALLOW, "") }
             val key = SpamEngine.national(number)
+            SpamEngine.screenedAt[key] = System.currentTimeMillis()
             if (d.action == SpamStore.ALLOW) SpamEngine.lastReasons.remove(key)
             else {
                 SpamEngine.lastReasons[key] = d.reason
