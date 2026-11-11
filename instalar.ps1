@@ -23,6 +23,7 @@ Copy-Item "$origen\android\AndroidManifest.xml" "$Destino\android\app\src\main\A
 $kt = "$Destino\android\app\src\main\kotlin\com\nexlia\phone"
 New-Item -ItemType Directory -Force -Path $kt | Out-Null
 Copy-Item "$origen\android\kotlin\*.kt" $kt -Force
+Copy-Item "$origen\android\res\*" "$Destino\android\app\src\main\res" -Recurse -Force
 if (Test-Path "$Destino\test\widget_test.dart") { Remove-Item "$Destino\test\widget_test.dart" }
 
 Write-Host "3/4 Ajustando Android minimo (Android 10) ..."

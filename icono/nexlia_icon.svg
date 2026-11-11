@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#22E3A6"/>
+      <stop offset="0.55" stop-color="#0FA3D8"/>
+      <stop offset="1" stop-color="#1B4DFF"/>
+    </linearGradient>
+    <linearGradient id="shine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.28"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="badge" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#E4F1FF"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" rx="228" fill="url(#bg)"/>
+  <rect width="1024" height="1024" rx="228" fill="url(#shine)"/>
+  <!-- auricular -->
+  <g transform="translate(452 478) rotate(-45)">
+    <path d="M -210 40 Q 0 -120 210 40" fill="none" stroke="#FFFFFF" stroke-width="92" stroke-linecap="butt"/>
+    <rect x="-292" y="-8" width="170" height="150" rx="52" fill="#FFFFFF" transform="rotate(-14 -207 67)"/>
+    <rect x="122" y="-8" width="170" height="150" rx="52" fill="#FFFFFF" transform="rotate(14 207 67)"/>
+  </g>
+  <!-- escudo del bloqueador -->
+  <g transform="translate(716 706) scale(0.92)">
+    <path d="M 0 -150 L 122 -104 V -6 C 122 76 68 132 0 160 C -68 132 -122 76 -122 -6 V -104 Z"
+          fill="url(#badge)" stroke="#0E6FE0" stroke-opacity="0.25" stroke-width="6"/>
+    <path d="M -52 4 L -14 44 L 56 -38" fill="none" stroke="#12B886" stroke-width="30"
+          stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>
