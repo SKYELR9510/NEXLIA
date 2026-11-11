@@ -151,6 +151,13 @@ class MainActivity : FlutterActivity() {
                 contentResolver.update(ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id), v, null, null)
                 true
             }
+            "getContactPhoto" -> bg(result) {
+                val id = (call.argument<String>("id") ?: "0").toLong()
+                val uri = ContentUris.withAppendedId(ContactsContract.Contacts.CONTENT_URI, id)
+                ContactsContract.Contacts.openContactPhotoInputStream(
+                    contentResolver, uri, call.argument<Boolean>("big") == true
+                )?.use { it.readBytes() }
+            }
             "getCallState" -> result.success(CallManager.snapshot())
             "answer" -> { CallManager.answer(); result.success(true) }
             "hangup" -> { CallManager.hangup(); result.success(true) }
@@ -214,7 +221,8 @@ class MainActivity : FlutterActivity() {
             ContactsContract.CommonDataKinds.Phone.CONTACT_ID,
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME,
             ContactsContract.CommonDataKinds.Phone.NUMBER,
-            ContactsContract.CommonDataKinds.Phone.STARRED
+            ContactsContract.CommonDataKinds.Phone.STARRED,
+            ContactsContract.CommonDataKinds.Phone.PHOTO_THUMBNAIL_URI
         )
         contentResolver.query(uri, cols, null, null,
             ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME + " COLLATE LOCALIZED ASC")?.use { c ->
@@ -223,7 +231,8 @@ class MainActivity : FlutterActivity() {
                     "id" to c.getLong(0).toString(),
                     "name" to (c.getString(1) ?: ""),
                     "number" to (c.getString(2) ?: ""),
-                    "starred" to (c.getInt(3) == 1)
+                    "starred" to (c.getInt(3) == 1),
+                    "photo" to (c.getString(4) != null)
                 ))
             }
         }

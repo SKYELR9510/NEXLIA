@@ -139,7 +139,7 @@ class _CallScreenState extends State<CallScreen> {
                   Container(
                     padding: const EdgeInsets.all(4),
                     decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0x33FFFFFF)),
-                    child: Avatar(name, size: 132),
+                    child: Avatar(name, size: 132, contact: AppData.i.contactFor(number)),
                   ),
                   const SizedBox(height: 18),
                   Padding(

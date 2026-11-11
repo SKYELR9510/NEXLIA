@@ -162,7 +162,7 @@ class _RecentsPageState extends State<RecentsPage> {
                                 padding: const EdgeInsets.only(left: 16),
                                 child: Row(
                                   children: [
-                                    Avatar(contact?.name ?? e.name, size: 46),
+                                    Avatar(contact?.name ?? e.name, size: 46, contact: contact),
                                     const SizedBox(width: 14),
                                     Expanded(
                                       child: Container(

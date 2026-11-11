@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
@@ -182,12 +183,35 @@ String formatDuration(int seconds) {
 }
 
 class Avatar extends StatelessWidget {
-  const Avatar(this.name, {super.key, this.size = 40});
+  const Avatar(this.name, {super.key, this.size = 40, this.contact});
   final String name;
   final double size;
 
+  /// Si el contacto tiene foto en la agenda, se muestra en lugar de las iniciales.
+  final Contact? contact;
+
   @override
   Widget build(BuildContext context) {
+    final c = contact;
+    if (c == null || !c.hasPhoto) return _initials(context);
+    return FutureBuilder<Uint8List?>(
+      future: Native.contactPhoto(c.id, big: size > 90),
+      builder: (context, snap) {
+        final bytes = snap.data;
+        if (bytes == null || bytes.isEmpty) return _initials(context);
+        return ClipOval(
+          child: Image.memory(bytes,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              gaplessPlayback: true,
+              errorBuilder: (context, _, __) => _initials(context)),
+        );
+      },
+    );
+  }
+
+  Widget _initials(BuildContext context) {
     final known = name.trim().isNotEmpty;
     return Container(
       width: size,

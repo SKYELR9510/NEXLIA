@@ -5,11 +5,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
 class Contact {
-  Contact(this.id, this.name, this.numbers, this.starred);
+  Contact(this.id, this.name, this.numbers, this.starred, this.hasPhoto);
   final String id;
   final String name;
   final List<String> numbers;
   bool starred;
+  final bool hasPhoto;
 }
 
 class CallEntry {
@@ -65,6 +66,19 @@ class Native {
   static Future<bool> setStarred(String id, bool starred) =>
       _bool('setStarred', {'id': id, 'starred': starred});
 
+  static final Map<String, Future<Uint8List?>> _photos = {};
+
+  /// Foto del contacto (miniatura, o grande si [big]). Se guarda en memoria.
+  static Future<Uint8List?> contactPhoto(String id, {bool big = false}) {
+    return _photos.putIfAbsent('$id/$big', () async {
+      try {
+        return await _ch.invokeMethod<Uint8List>('getContactPhoto', {'id': id, 'big': big});
+      } catch (_) {
+        return null;
+      }
+    });
+  }
+
   static Future<bool> answer() => _bool('answer');
   static Future<bool> hangup() => _bool('hangup');
   static Future<bool> toggleHold() => _bool('toggleHold');
@@ -98,7 +112,7 @@ class Native {
         final id = m['id'] as String;
         final number = (m['number'] as String).trim();
         final c = byId.putIfAbsent(
-            id, () => Contact(id, m['name'] as String, [], m['starred'] == true));
+            id, () => Contact(id, m['name'] as String, [], m['starred'] == true, m['photo'] == true));
         if (number.isNotEmpty && !c.numbers.any((n) => sameNumber(n, number))) {
           c.numbers.add(number);
         }

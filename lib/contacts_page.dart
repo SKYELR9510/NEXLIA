@@ -115,7 +115,7 @@ class _ContactsPageState extends State<ContactsPage> {
                                           width: 74,
                                           child: Column(
                                             children: [
-                                              Avatar(c.name, size: 58),
+                                              Avatar(c.name, size: 58, contact: c),
                                               const SizedBox(height: 6),
                                               Text(c.name.split(' ').first,
                                                   maxLines: 1,
@@ -162,7 +162,7 @@ class _ContactsPageState extends State<ContactsPage> {
                                 padding: const EdgeInsets.only(left: 18, right: 30),
                                 child: Row(
                                   children: [
-                                    Avatar(c.name, size: 40),
+                                    Avatar(c.name, size: 40, contact: c),
                                     const SizedBox(width: 14),
                                     Expanded(
                                       child: Container(
@@ -324,7 +324,7 @@ class _ContactDetailState extends State<ContactDetail> {
         child: ListView(
           children: [
             const SizedBox(height: 12),
-            Center(child: Avatar(c.name, size: 104)),
+            Center(child: Avatar(c.name, size: 104, contact: c)),
             const SizedBox(height: 12),
             Text(c.name,
                 textAlign: TextAlign.center,
