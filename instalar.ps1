@@ -1,6 +1,6 @@
 # Crea el proyecto Flutter y copia el codigo del marcador encima.
 # Uso: clic derecho > "Ejecutar con PowerShell", o doble clic en instalar.bat
-param([string]$Destino = "C:\proyectos\livak_phone")
+param([string]$Destino = "C:\proyectos\nexlia")
 
 $ErrorActionPreference = "Stop"
 $origen = $PSScriptRoot
@@ -14,13 +14,13 @@ New-Item -ItemType Directory -Force -Path $Destino | Out-Null
 Set-Location $Destino
 
 Write-Host "1/4 Creando proyecto Flutter en $Destino ..."
-flutter create --org com.livak --project-name livak_phone --platforms android .
+flutter create --org com.nexlia --project-name phone --platforms android .
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
 Write-Host "2/4 Copiando el codigo ..."
 Copy-Item "$origen\lib\*" "$Destino\lib" -Recurse -Force
 Copy-Item "$origen\android\AndroidManifest.xml" "$Destino\android\app\src\main\AndroidManifest.xml" -Force
-$kt = "$Destino\android\app\src\main\kotlin\com\livak\livak_phone"
+$kt = "$Destino\android\app\src\main\kotlin\com\nexlia\phone"
 New-Item -ItemType Directory -Force -Path $kt | Out-Null
 Copy-Item "$origen\android\kotlin\*.kt" $kt -Force
 if (Test-Path "$Destino\test\widget_test.dart") { Remove-Item "$Destino\test\widget_test.dart" }

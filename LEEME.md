@@ -1,16 +1,16 @@
-# Marcador estilo iPhone con contactos y bloqueador de spam
+# NEXLIA — marcador estilo iPhone con contactos y bloqueador de spam
 
-Nombre provisional: **Teléfono** (`com.livak.livak_phone`). Flutter para la interfaz, Kotlin para llamadas y bloqueo.
+App: **NEXLIA** (`com.nexlia.phone`). Flutter para la interfaz, Kotlin para llamadas y bloqueo.
 
 ## Instalar
 
 1. Descomprime esta carpeta en tu PC.
-2. Doble clic en `instalar.bat`. Crea el proyecto en `C:\proyectos\livak_phone`, copia el código y fija Android 10 como mínimo.
-3. Con el teléfono conectado por USB: `cd C:\proyectos\livak_phone` y `flutter run --release`.
+2. Doble clic en `instalar.bat`. Crea el proyecto en `C:\proyectos\nexlia`, copia el código y fija Android 10 como mínimo.
+3. Con el teléfono conectado por USB: `cd C:\proyectos\nexlia` y `flutter run --release`.
 4. Al abrir la app, acepta los permisos y toca **Activar** para dejarla como Teléfono predeterminado. Sin ese paso no recibe llamadas ni bloquea spam.
 
 ### Xiaomi (HyperOS)
-En Ajustes > Apps > Teléfono (esta app) > Otros permisos, activa **Mostrar en pantalla de bloqueo** y **Abrir ventanas nuevas en segundo plano**, y pon **Sin restricciones** en ahorro de batería. Si no, la pantalla de llamada entrante puede no aparecer con el teléfono bloqueado.
+En Ajustes > Apps > NEXLIA > Otros permisos, activa **Mostrar en pantalla de bloqueo** y **Abrir ventanas nuevas en segundo plano**, y pon **Sin restricciones** en ahorro de batería. Si no, la pantalla de llamada entrante puede no aparecer con el teléfono bloqueado.
 
 ## Qué trae
 

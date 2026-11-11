@@ -1,4 +1,4 @@
-package com.livak.livak_phone
+package com.nexlia.phone
 
 import android.Manifest
 import android.app.role.RoleManager
@@ -39,10 +39,10 @@ class MainActivity : FlutterActivity() {
         CallManager.appContext = applicationContext
         dialNumber = numberFrom(intent)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
-        MethodChannel(messenger, "livak/phone").setMethodCallHandler { call, result ->
+        MethodChannel(messenger, "nexlia/phone").setMethodCallHandler { call, result ->
             try { handle(call, result) } catch (e: Exception) { result.error("error", e.message, null) }
         }
-        EventChannel(messenger, "livak/phone/events").setStreamHandler(object : EventChannel.StreamHandler {
+        EventChannel(messenger, "nexlia/phone/events").setStreamHandler(object : EventChannel.StreamHandler {
             override fun onListen(arguments: Any?, events: EventChannel.EventSink?) { sink = events }
             override fun onCancel(arguments: Any?) { sink = null }
         })

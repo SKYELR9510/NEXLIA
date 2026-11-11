@@ -40,8 +40,8 @@ bool sameNumber(String a, String b) {
 
 /// Puente con la parte nativa (Kotlin).
 class Native {
-  static const _ch = MethodChannel('livak/phone');
-  static const _ev = EventChannel('livak/phone/events');
+  static const _ch = MethodChannel('nexlia/phone');
+  static const _ev = EventChannel('nexlia/phone/events');
 
   static final Stream<Map<dynamic, dynamic>> events =
       _ev.receiveBroadcastStream().map((e) => Map<dynamic, dynamic>.from(e as Map));

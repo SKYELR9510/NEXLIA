@@ -27,7 +27,7 @@ class PhoneApp extends StatelessWidget {
     return CupertinoApp(
       navigatorKey: navKey,
       debugShowCheckedModeBanner: false,
-      title: 'Teléfono',
+      title: 'NEXLIA',
       theme: const CupertinoThemeData(primaryColor: CupertinoColors.systemBlue),
       home: const Home(),
     );
