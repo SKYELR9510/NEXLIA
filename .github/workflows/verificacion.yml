@@ -1,5 +1,6 @@
-# Verificación sin publicar: se ejecuta en ramas distintas de main y en Pull Requests.
-# Arma el proyecto igual que apk.yml, pero compila en modo debug y no usa la clave de firma.
+# Verificación sin publicar.
+# - En ramas distintas de main y en Pull Requests hacia main.
+# - También la invoca apk.yml antes de publicar (workflow_call): si falla, no se publica.
 name: Verificación
 
 on:
@@ -7,6 +8,7 @@ on:
     branches-ignore: [main]
   pull_request:
     branches: [main]
+  workflow_call:
 
 permissions:
   contents: read
@@ -25,6 +27,7 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.50.0
 
       - name: Versiones del entorno
         run: |
@@ -32,53 +35,26 @@ jobs:
           java -version
           php --version
 
-      - name: Armar el proyecto Flutter
-        run: |
-          mkdir app && cd app
-          flutter create --org com.nexlia --project-name phone --platforms android .
-          flutter pub add video_player
-          cp -r ../lib/* lib/
-          rm -f test/widget_test.dart
-          mkdir -p test && cp -r ../test/* test/
-          cp ../android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-          mkdir -p android/app/src/main/kotlin/com/nexlia/phone
-          cp ../android/kotlin/*.kt android/app/src/main/kotlin/com/nexlia/phone/
-          mkdir -p android/app/src/test/kotlin/com/nexlia/phone
-          cp ../android/test/*.kt android/app/src/test/kotlin/com/nexlia/phone/
-          cp -r ../android/res/* android/app/src/main/res/
-          mkdir -p assets && cp ../assets/* assets/
-          sed -i 's|^  uses-material-design: true|  uses-material-design: true\n  assets:\n    - assets/icon.png|' pubspec.yaml
-          sed -i 's/flutter\.minSdkVersion/29/' android/app/build.gradle*
-          printf '\nsubprojects {\n    tasks.configureEach {\n        if (name.startsWith("lintVital")) { enabled = false }\n    }\n}\n' >> android/build.gradle.kts
-          printf '\ndependencies {\n    testImplementation("junit:junit:4.13.2")\n}\n' >> android/app/build.gradle.kts
-          flutter pub get
-          echo "== Dependencias resueltas =="
-          flutter pub deps --style=compact
-          echo "== Configuración Android generada =="
-          grep -nE "compileSdk|minSdk|targetSdk|ndkVersion|jvmTarget|JavaVersion" android/app/build.gradle.kts || true
+      - name: Dependencias (exactamente las de pubspec.lock)
+        run: flutter pub get --enforce-lockfile
 
       - name: Formato (informativo)
-        working-directory: app
         run: dart format --output=none --set-exit-if-changed lib test || echo "::warning::Hay archivos sin formato estándar"
 
       - name: Análisis estático
-        working-directory: app
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
       - name: Pruebas Dart
-        working-directory: app
         run: flutter test
 
       - name: Compilar APK debug
-        working-directory: app
         run: flutter build apk --debug
 
       - name: Pruebas Kotlin
-        working-directory: app/android
+        working-directory: android
         run: ./gradlew :app:testDebugUnitTest --console=plain
 
       - name: Permisos del manifiesto final (incluye los de plugins)
-        working-directory: app
         run: |
           f=$(find build/app/intermediates -name AndroidManifest.xml -path "*merged_manifest*" | head -1)
           echo "$f"
