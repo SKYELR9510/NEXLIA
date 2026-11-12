@@ -1,0 +1,75 @@
+# APK para pruebas físicas de los PR #3, #4 y #5 integrados.
+# Solo corre en la rama temporal tmp/integracion-p0. NO publica release:
+# el APK queda como artefacto de esta ejecución.
+name: APK de pruebas P0 (no publica)
+
+on:
+  push:
+    branches: [tmp/integracion-p0]
+
+permissions:
+  contents: read
+
+jobs:
+  # Todas las verificaciones (análisis, pruebas Dart y Kotlin, build debug, php -l).
+  # Si falla, no se compila el APK de pruebas.
+  verificar:
+    uses: ./.github/workflows/verificacion.yml
+
+  apk:
+    needs: verificar
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+      KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+
+      - name: Compilar con la clave de producción
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASS" ]; then
+            echo "Faltan los secretos de firma"; exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android/app/nexlia.keystore
+          flutter pub get --enforce-lockfile
+          # versionCode 13 = igual a la release v1.0.13: se instala encima de ella
+          # y la siguiente versión oficial (14 o más) se instala encima de esta.
+          flutter build apk --release --build-name=1.0.13-pruebas-p0 --build-number=13
+          rm -f android/app/nexlia.keystore
+          mkdir out
+          cp build/app/outputs/flutter-apk/app-release.apk out/NEXLIA-pruebas-P0.apk
+
+      - name: Comprobar firma, versión y Android mínimo
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          cd out
+          $BT/apksigner verify --verbose --print-certs NEXLIA-pruebas-P0.apk | tee firma.txt
+          grep -qi "certificate SHA-256 digest: e0735399159692c453a3ffbdd4c695a9bafc289cc1f19c89743cb298942d6394" firma.txt \
+            && echo "FIRMA: clave de producción" || { echo "FIRMA INESPERADA"; exit 1; }
+          $BT/aapt2 dump badging NEXLIA-pruebas-P0.apk | grep -E "^package:|^sdkVersion|^targetSdkVersion" | tee version.txt
+          grep -q "sdkVersion:'29'" version.txt && echo "MINIMO: Android 10 (API 29)"
+          sha256sum NEXLIA-pruebas-P0.apk | tee NEXLIA-pruebas-P0.apk.sha256
+          {
+            echo "commit: $GITHUB_SHA"
+            echo "PR #3 chore/build-reproducible: 8190b2c"
+            echo "PR #4 fix/seleccion-sim: 3c3eda8"
+            echo "PR #5 fix/resultados-nativos: dbbd10f"
+          } >> version.txt
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NEXLIA-pruebas-P0
+          path: out/
+          retention-days: 14
+          if-no-files-found: error
