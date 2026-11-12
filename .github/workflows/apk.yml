@@ -30,6 +30,7 @@ jobs:
         run: |
           mkdir app && cd app
           flutter create --org com.nexlia --project-name phone --platforms android .
+          flutter pub add video_player
           cp -r ../lib/* lib/
           cp ../android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           mkdir -p android/app/src/main/kotlin/com/nexlia/phone

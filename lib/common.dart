@@ -40,6 +40,39 @@ class AppTheme {
   }
 }
 
+/// Personalización de la pantalla de llamada.
+class CallStyle {
+  /// Imagen de fondo de la pantalla de llamada ('' = fondo azul de NEXLIA).
+  static final ValueNotifier<String> background = ValueNotifier<String>('');
+
+  /// Video que se reproduce cuando entra una llamada ('' = ninguno).
+  static final ValueNotifier<String> ringVideo = ValueNotifier<String>('');
+
+  /// Si el video suena en lugar del tono de llamada.
+  static final ValueNotifier<bool> ringSound = ValueNotifier<bool>(true);
+
+  static Future<void> load() async {
+    background.value = await Native.getPref('call_bg') ?? '';
+    ringVideo.value = await Native.getPref('ring_video') ?? '';
+    ringSound.value = (await Native.getPref('ring_video_sound') ?? '1') == '1';
+  }
+
+  static void setBackground(String path) {
+    background.value = path;
+    Native.setPref('call_bg', path);
+  }
+
+  static void setRingVideo(String path) {
+    ringVideo.value = path;
+    Native.setPref('ring_video', path);
+  }
+
+  static void setRingSound(bool on) {
+    ringSound.value = on;
+    Native.setPref('ring_video_sound', on ? '1' : '0');
+  }
+}
+
 /// Espacio que ocupa la barra inferior, incluida la barra de navegación del sistema.
 double barSpace(BuildContext c) => 62 + MediaQuery.of(c).padding.bottom;
 

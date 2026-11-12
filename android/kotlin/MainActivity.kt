@@ -7,6 +7,7 @@ import android.content.ContentUris
 import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -19,6 +20,7 @@ import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.EventChannel
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
+import java.io.File
 import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
@@ -29,6 +31,8 @@ class MainActivity : FlutterActivity() {
 
     private val REQ_ROLE = 1001
     private val REQ_PERMS = 1002
+    private val REQ_PICK = 1003
+    private var pickKind = "image"
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -201,6 +205,25 @@ class MainActivity : FlutterActivity() {
                 try { startActivity(i) } catch (e: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
                 result.success(true)
             }
+            "pickMedia" -> {
+                pickKind = if (call.argument<String>("kind") == "video") "video" else "image"
+                pending = result
+                val i = Intent(Intent.ACTION_GET_CONTENT)
+                    .setType(if (pickKind == "video") "video/*" else "image/*")
+                    .addCategory(Intent.CATEGORY_OPENABLE)
+                startActivityForResult(i, REQ_PICK)
+            }
+            "removeMedia" -> {
+                val prefix = if (call.argument<String>("kind") == "video") "ring_video_" else "call_bg_"
+                filesDir.listFiles()?.filter { it.name.startsWith(prefix) }?.forEach { it.delete() }
+                result.success(true)
+            }
+            "ringerNormal" -> result.success(
+                getSystemService(AudioManager::class.java).ringerMode == AudioManager.RINGER_MODE_NORMAL)
+            "silenceRinger" -> {
+                try { getSystemService(TelecomManager::class.java).silenceRinger() } catch (e: Exception) { }
+                result.success(true)
+            }
             "getSpamData" -> result.success(SpamStore.allJson(this))
             "setSpamSettings" -> { SpamStore.saveSettings(this, call.argument<String>("json") ?: "{}"); result.success(true) }
             "setBlocked" -> { SpamStore.saveBlocked(this, call.argument<String>("json") ?: "[]"); result.success(true) }
@@ -285,6 +308,29 @@ class MainActivity : FlutterActivity() {
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK) {
+            val res = pending
+            pending = null
+            val uri = data?.data
+            if (res == null) return
+            if (resultCode != RESULT_OK || uri == null) { res.success(null); return }
+            val prefix = if (pickKind == "video") "ring_video_" else "call_bg_"
+            val ext = if (pickKind == "video") ".mp4" else ".jpg"
+            io.execute {
+                try {
+                    // Se guarda una copia dentro de la app para que siga disponible siempre.
+                    filesDir.listFiles()?.filter { it.name.startsWith(prefix) }?.forEach { it.delete() }
+                    val out = File(filesDir, prefix + System.currentTimeMillis() + ext)
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        out.outputStream().use { input.copyTo(it) }
+                    }
+                    runOnUiThread { res.success(out.absolutePath) }
+                } catch (e: Exception) {
+                    runOnUiThread { res.error("error", e.message, null) }
+                }
+            }
+            return
+        }
         if (requestCode == REQ_ROLE) {
             pending?.success(isDefaultDialer())
             pending = null

@@ -158,6 +158,19 @@ class Native {
   static Future<bool> callVoicemail() => _bool('callVoicemail');
   static Future<bool> openSettings(String which) => _bool('openSettings', {'which': which});
 
+  /// Abre la galería y devuelve la ruta de la copia guardada, o null si se canceló.
+  static Future<String?> pickMedia(String kind) async {
+    try {
+      return await _ch.invokeMethod<String>('pickMedia', {'kind': kind});
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<bool> removeMedia(String kind) => _bool('removeMedia', {'kind': kind});
+  static Future<bool> ringerNormal() => _bool('ringerNormal');
+  static Future<bool> silenceRinger() => _bool('silenceRinger');
+
   static Future<String> getVersion() async {
     try {
       return await _ch.invokeMethod<String>('getVersion') ?? '';

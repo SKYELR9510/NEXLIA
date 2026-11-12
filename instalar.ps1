@@ -43,6 +43,7 @@ foreach ($g in @("$Destino\android\app\build.gradle.kts", "$Destino\android\app\
 }
 
 Write-Host "4/4 Descargando dependencias ..."
+flutter pub add video_player
 flutter pub get
 
 Write-Host ""

@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
+import 'package:video_player/video_player.dart';
 
 import 'common.dart';
 import 'native.dart';
@@ -120,8 +122,15 @@ class _CallScreenState extends State<CallScreen> {
     final ringing = state == 'ringing';
     final ended = state == 'disconnected';
 
+    final video = CallStyle.ringVideo.value;
+    final bg = CallStyle.background.value;
+
     return PopScope(
       canPop: false,
+      // Atrás: la llamada sigue y se vuelve a la app (queda una franja verde para regresar).
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && !ringing && !ended) _minimize();
+      },
       child: CupertinoPageScaffold(
         child: AnnotatedRegion<SystemUiOverlayStyle>(
           value: SystemUiOverlayStyle.light,
@@ -136,7 +145,33 @@ class _CallScreenState extends State<CallScreen> {
                 stops: [0, 0.55, 1],
               ),
             ),
-            child: SafeArea(
+            child: Stack(
+              children: [
+                if (ringing && video.isNotEmpty)
+                  Positioned.fill(
+                    child: RingVideo(path: video, sound: CallStyle.ringSound.value && spam.isEmpty),
+                  )
+                else if (bg.isNotEmpty)
+                  Positioned.fill(
+                    child: Image.file(File(bg),
+                        fit: BoxFit.cover, errorBuilder: (context, _, __) => const SizedBox()),
+                  ),
+                if ((ringing && video.isNotEmpty) || bg.isNotEmpty)
+                  Positioned.fill(
+                    // Oscurece el fondo para que el texto y los botones se lean.
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [Color(0x99000000), Color(0x33000000), Color(0xB3000000)],
+                          stops: [0, 0.4, 1],
+                        ),
+                      ),
+                    ),
+                  ),
+                Positioned.fill(
+                  child: SafeArea(
               child: Column(
                 children: [
                   const SizedBox(height: 40),
@@ -204,6 +239,9 @@ class _CallScreenState extends State<CallScreen> {
                   const SizedBox(height: 44),
                 ],
               ),
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -278,10 +316,14 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
-  void _addCall() {
+  void _minimize() {
     CallScreen.minimized.value = true;
-    homeTab.value = 0;
     Navigator.of(context).pop();
+  }
+
+  void _addCall() {
+    homeTab.value = 0;
+    _minimize();
   }
 
   Widget _controls() {
@@ -370,6 +412,66 @@ class _CallScreenState extends State<CallScreen> {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Video a pantalla completa mientras entra una llamada.
+class RingVideo extends StatefulWidget {
+  const RingVideo({super.key, required this.path, required this.sound});
+  final String path;
+
+  /// Si es true, el video suena en lugar del tono (solo con el teléfono en modo sonido).
+  final bool sound;
+
+  @override
+  State<RingVideo> createState() => _RingVideoState();
+}
+
+class _RingVideoState extends State<RingVideo> {
+  VideoPlayerController? c;
+  bool ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _start();
+  }
+
+  Future<void> _start() async {
+    try {
+      final ctrl = VideoPlayerController.file(File(widget.path),
+          videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true));
+      c = ctrl;
+      await ctrl.initialize();
+      await ctrl.setLooping(true);
+      final audible = widget.sound && await Native.ringerNormal();
+      await ctrl.setVolume(audible ? 1 : 0);
+      if (!mounted) return;
+      if (audible) await Native.silenceRinger();
+      await ctrl.play();
+      if (mounted) setState(() => ready = true);
+    } catch (_) {
+      // Si el video no se puede reproducir, queda el fondo normal.
+    }
+  }
+
+  @override
+  void dispose() {
+    c?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final ctrl = c;
+    if (!ready || ctrl == null) return const SizedBox();
+    final size = ctrl.value.size;
+    return ClipRect(
+      child: FittedBox(
+        fit: BoxFit.cover,
+        child: SizedBox(width: size.width, height: size.height, child: VideoPlayer(ctrl)),
+      ),
     );
   }
 }

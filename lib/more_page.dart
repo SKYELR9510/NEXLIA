@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/cupertino.dart';
 
 import 'common.dart';
@@ -28,6 +30,8 @@ class MorePage extends StatelessWidget {
         const ScreenTitle('Configuración'),
         _row(context, CupertinoIcons.paintbrush_fill, const Color(0xFFFF9F0A), 'Apariencia', modeName,
             () => _push(context, const AppearancePage())),
+        _row(context, CupertinoIcons.photo_fill, const Color(0xFF0A84FF), 'Pantalla de llamada',
+            'Fondo propio y video al recibir llamadas', () => _push(context, const CallStylePage())),
         _row(context, CupertinoIcons.shield_lefthalf_fill, const Color(0xFF5E5CE6),
             'Bloqueo de llamadas', 'Spam, desconocidos y números bloqueados',
             () => _push(context, const SpamPage())),
@@ -338,6 +342,161 @@ class VoicemailPage extends StatelessWidget {
           ),
           const Spacer(flex: 2),
         ],
+      ),
+    );
+  }
+}
+
+/// Fondo de la pantalla de llamada y video para llamadas entrantes.
+class CallStylePage extends StatelessWidget {
+  const CallStylePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation:
+          Listenable.merge([CallStyle.background, CallStyle.ringVideo, CallStyle.ringSound]),
+      builder: (context, _) => _content(context),
+    );
+  }
+
+  Widget _button(BuildContext context, String text, VoidCallback onTap, {bool danger = false}) {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+      color: danger ? const Color(0x22FF3B30) : fillColor(context),
+      borderRadius: BorderRadius.circular(22),
+      onPressed: onTap,
+      child: Text(text,
+          style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w600,
+              color: danger ? const Color(0xFFFF3B30) : labelColor(context))),
+    );
+  }
+
+  Widget _content(BuildContext context) {
+    final bg = CallStyle.background.value;
+    final video = CallStyle.ringVideo.value;
+    final title = TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: labelColor(context));
+    final note = TextStyle(fontSize: 13, color: secondaryColor(context));
+    return CupertinoPageScaffold(
+      backgroundColor: bgColor(context),
+      navigationBar: CupertinoNavigationBar(
+        middle: Text('Pantalla de llamada', style: TextStyle(color: labelColor(context))),
+        previousPageTitle: 'Más',
+        backgroundColor: bgColor(context),
+        border: null,
+      ),
+      child: SafeArea(
+        child: ListView(
+          padding: const EdgeInsets.all(20),
+          children: [
+            Text('Fondo de la llamada', style: title),
+            const SizedBox(height: 4),
+            Text('Imagen que se ve detrás durante todas las llamadas.', style: note),
+            const SizedBox(height: 14),
+            Center(
+              child: Container(
+                width: 130,
+                height: 230,
+                clipBehavior: Clip.antiAlias,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(color: separatorColor(context), width: 1.5),
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF0A2A6E), Color(0xFF040A18), Color(0xFF0B2F7A)],
+                  ),
+                ),
+                child: bg.isEmpty
+                    ? const Center(
+                        child: Text('Fondo NEXLIA',
+                            style: TextStyle(color: Color(0xCCFFFFFF), fontSize: 13)))
+                    : Image.file(File(bg),
+                        fit: BoxFit.cover, errorBuilder: (context, _, __) => const SizedBox()),
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _button(context, 'Elegir imagen', () async {
+                  final p = await Native.pickMedia('image');
+                  if (p != null && p.isNotEmpty) CallStyle.setBackground(p);
+                }),
+                if (bg.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  _button(context, 'Quitar', () {
+                    CallStyle.setBackground('');
+                    Native.removeMedia('image');
+                  }, danger: true),
+                ],
+              ],
+            ),
+            const SizedBox(height: 34),
+            Text('Video al recibir llamadas', style: title),
+            const SizedBox(height: 4),
+            Text('Se reproduce a pantalla completa mientras el teléfono suena.', style: note),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration:
+                  BoxDecoration(color: fillColor(context), borderRadius: BorderRadius.circular(16)),
+              child: Row(
+                children: [
+                  Icon(video.isEmpty ? CupertinoIcons.film : CupertinoIcons.film_fill,
+                      color: video.isEmpty ? secondaryColor(context) : accentColor(context)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(video.isEmpty ? 'Sin video' : 'Video elegido',
+                        style: TextStyle(fontSize: 16, color: labelColor(context))),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _button(context, 'Elegir video', () async {
+                  final p = await Native.pickMedia('video');
+                  if (p != null && p.isNotEmpty) CallStyle.setRingVideo(p);
+                }),
+                if (video.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  _button(context, 'Quitar', () {
+                    CallStyle.setRingVideo('');
+                    Native.removeMedia('video');
+                  }, danger: true),
+                ],
+              ],
+            ),
+            const SizedBox(height: 22),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Usar el sonido del video',
+                          style: TextStyle(
+                              fontSize: 17, fontWeight: FontWeight.w600, color: labelColor(context))),
+                      const SizedBox(height: 2),
+                      Text('Suena la música del video en lugar del tono de llamada.', style: note),
+                    ],
+                  ),
+                ),
+                CupertinoSwitch(value: CallStyle.ringSound.value, onChanged: CallStyle.setRingSound),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Text(
+                'El volumen de esa música es el de multimedia, no el del timbre. '
+                'Con el teléfono en silencio o vibración, el video se ve sin sonido.',
+                style: note),
+          ],
+        ),
       ),
     );
   }

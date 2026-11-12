@@ -17,6 +17,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   await AppTheme.load();
+  await CallStyle.load();
   runApp(const PhoneApp());
 }
 
