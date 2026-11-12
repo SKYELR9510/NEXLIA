@@ -54,6 +54,13 @@ jobs:
         working-directory: android
         run: ./gradlew :app:testDebugUnitTest --console=plain
 
+      - name: Resumen de pruebas Kotlin
+        if: always()
+        run: |
+          for f in build/app/test-results/testDebugUnitTest/TEST-*.xml; do
+            grep -oE '<testsuite name="[^"]+" tests="[0-9]+" skipped="[0-9]+" failures="[0-9]+" errors="[0-9]+"' "$f"
+          done
+
       - name: Permisos del manifiesto final (incluye los de plugins)
         run: |
           f=$(find build/app/intermediates -name AndroidManifest.xml -path "*merged_manifest*" | head -1)
