@@ -16,6 +16,8 @@ final GlobalKey<NavigatorState> navKey = GlobalKey<NavigatorState>();
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  // La app dibuja también detrás de la barra de navegación del sistema.
+  SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   await AppTheme.load();
   await CallStyle.load();
   runApp(const PhoneApp());
@@ -38,6 +40,22 @@ class PhoneApp extends StatelessWidget {
             brightness: m == 1 ? Brightness.light : (m == 2 ? Brightness.dark : null),
             primaryColor: AppTheme.accents[AppTheme.accent.value],
           ),
+          builder: (context, child) {
+            final dark = m == 2 ||
+                (m == 0 && MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+            return AnnotatedRegion<SystemUiOverlayStyle>(
+              value: SystemUiOverlayStyle(
+                statusBarColor: const Color(0x00000000),
+                statusBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+                statusBarBrightness: dark ? Brightness.dark : Brightness.light,
+                systemNavigationBarColor: const Color(0x00000000),
+                systemNavigationBarDividerColor: const Color(0x00000000),
+                systemNavigationBarContrastEnforced: false,
+                systemNavigationBarIconBrightness: dark ? Brightness.light : Brightness.dark,
+              ),
+              child: child!,
+            );
+          },
           home: const Home(),
         );
       },
@@ -88,6 +106,22 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
       dialText.value = (e['number'] ?? '').toString();
       navKey.currentState?.popUntil((r) => r.isFirst);
       homeTab.value = 0;
+      return;
+    }
+    if (e['type'] == 'shared') {
+      final path = (e['path'] ?? '').toString();
+      final video = e['kind'] == 'video';
+      if (path.isEmpty) return;
+      if (video) {
+        CallStyle.setRingVideo(path);
+      } else {
+        CallStyle.setRingTone(path);
+      }
+      final ctx = navKey.currentContext;
+      if (ctx != null) {
+        showMessage(ctx, video ? 'Video de llamada guardado' : 'Tono de llamada guardado',
+            'Se usará cuando te llamen. Puedes cambiarlo en Más > Pantalla de llamada.');
+      }
       return;
     }
     final state = e['state'];

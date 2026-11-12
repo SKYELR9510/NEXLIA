@@ -42,6 +42,13 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="tel"/>
             </intent-filter>
+            <!-- Recibir un video o audio desde otra app (Compartir > NEXLIA) -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <data android:mimeType="video/*"/>
+                <data android:mimeType="audio/*"/>
+            </intent-filter>
         </activity>
 
         <!-- Pantalla y control de llamadas -->

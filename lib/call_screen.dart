@@ -124,6 +124,7 @@ class _CallScreenState extends State<CallScreen> {
 
     final video = CallStyle.ringVideo.value;
     final bg = CallStyle.background.value;
+    final tone = CallStyle.ringTone.value;
 
     return PopScope(
       canPop: false,
@@ -133,7 +134,15 @@ class _CallScreenState extends State<CallScreen> {
       },
       child: CupertinoPageScaffold(
         child: AnnotatedRegion<SystemUiOverlayStyle>(
-          value: SystemUiOverlayStyle.light,
+          value: const SystemUiOverlayStyle(
+            statusBarColor: Color(0x00000000),
+            statusBarIconBrightness: Brightness.light,
+            statusBarBrightness: Brightness.dark,
+            systemNavigationBarColor: Color(0x00000000),
+            systemNavigationBarDividerColor: Color(0x00000000),
+            systemNavigationBarContrastEnforced: false,
+            systemNavigationBarIconBrightness: Brightness.light,
+          ),
           child: Container(
             width: double.infinity,
             height: double.infinity,
@@ -149,7 +158,9 @@ class _CallScreenState extends State<CallScreen> {
               children: [
                 if (ringing && video.isNotEmpty)
                   Positioned.fill(
-                    child: RingVideo(path: video, sound: CallStyle.ringSound.value && spam.isEmpty),
+                    child: RingVideo(
+                        path: video,
+                        sound: CallStyle.ringSound.value && spam.isEmpty && tone.isEmpty),
                   )
                 else if (bg.isNotEmpty)
                   Positioned.fill(
@@ -170,6 +181,8 @@ class _CallScreenState extends State<CallScreen> {
                       ),
                     ),
                   ),
+                if (ringing && tone.isNotEmpty && spam.isEmpty)
+                  RingVideo(path: tone, sound: true, audioOnly: true),
                 Positioned.fill(
                   child: SafeArea(
               child: Column(
@@ -418,8 +431,11 @@ class _CallScreenState extends State<CallScreen> {
 
 /// Video a pantalla completa mientras entra una llamada.
 class RingVideo extends StatefulWidget {
-  const RingVideo({super.key, required this.path, required this.sound});
+  const RingVideo({super.key, required this.path, required this.sound, this.audioOnly = false});
   final String path;
+
+  /// Solo sonido (tono propio), sin imagen.
+  final bool audioOnly;
 
   /// Si es true, el video suena en lugar del tono (solo con el teléfono en modo sonido).
   final bool sound;
@@ -465,7 +481,7 @@ class _RingVideoState extends State<RingVideo> {
   @override
   Widget build(BuildContext context) {
     final ctrl = c;
-    if (!ready || ctrl == null) return const SizedBox();
+    if (!ready || ctrl == null || widget.audioOnly) return const SizedBox();
     final size = ctrl.value.size;
     return ClipRect(
       child: FittedBox(

@@ -355,7 +355,8 @@ class CallStylePage extends StatelessWidget {
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation:
-          Listenable.merge([CallStyle.background, CallStyle.ringVideo, CallStyle.ringSound]),
+          Listenable.merge(
+              [CallStyle.background, CallStyle.ringVideo, CallStyle.ringSound, CallStyle.ringTone]),
       builder: (context, _) => _content(context),
     );
   }
@@ -377,6 +378,7 @@ class CallStylePage extends StatelessWidget {
   Widget _content(BuildContext context) {
     final bg = CallStyle.background.value;
     final video = CallStyle.ringVideo.value;
+    final tone = CallStyle.ringTone.value;
     final title = TextStyle(fontSize: 17, fontWeight: FontWeight.w700, color: labelColor(context));
     final note = TextStyle(fontSize: 13, color: secondaryColor(context));
     return CupertinoPageScaffold(
@@ -490,10 +492,50 @@ class CallStylePage extends StatelessWidget {
                 CupertinoSwitch(value: CallStyle.ringSound.value, onChanged: CallStyle.setRingSound),
               ],
             ),
-            const SizedBox(height: 10),
+            const SizedBox(height: 34),
+            Text('Tono de llamada propio', style: title),
+            const SizedBox(height: 4),
+            Text('Una canción o audio guardado en el teléfono. Si eliges uno, suena en lugar del '
+                'tono del teléfono y del sonido del video.', style: note),
+            const SizedBox(height: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              decoration:
+                  BoxDecoration(color: fillColor(context), borderRadius: BorderRadius.circular(16)),
+              child: Row(
+                children: [
+                  Icon(CupertinoIcons.music_note_2,
+                      color: tone.isEmpty ? secondaryColor(context) : accentColor(context)),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(tone.isEmpty ? 'Tono del teléfono' : 'Tono propio elegido',
+                        style: TextStyle(fontSize: 16, color: labelColor(context))),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _button(context, 'Elegir audio', () async {
+                  final p = await Native.pickMedia('audio');
+                  if (p != null && p.isNotEmpty) CallStyle.setRingTone(p);
+                }),
+                if (tone.isNotEmpty) ...[
+                  const SizedBox(width: 10),
+                  _button(context, 'Quitar', () {
+                    CallStyle.setRingTone('');
+                    Native.removeMedia('audio');
+                  }, danger: true),
+                ],
+              ],
+            ),
+            const SizedBox(height: 22),
             Text(
-                'El volumen de esa música es el de multimedia, no el del timbre. '
-                'Con el teléfono en silencio o vibración, el video se ve sin sonido.',
+                'También puedes enviar un video o un audio desde otra app: Compartir > NEXLIA.\n\n'
+                'El volumen de la música es el de multimedia, no el del timbre. '
+                'Con el teléfono en silencio o vibración no suena.',
                 style: note),
           ],
         ),

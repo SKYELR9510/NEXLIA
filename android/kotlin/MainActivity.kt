@@ -14,6 +14,7 @@ import android.os.Bundle
 import android.provider.CallLog
 import android.provider.ContactsContract
 import android.provider.Settings
+import android.webkit.MimeTypeMap
 import android.telecom.TelecomManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -33,6 +34,7 @@ class MainActivity : FlutterActivity() {
     private val REQ_PERMS = 1002
     private val REQ_PICK = 1003
     private var pickKind = "image"
+    private var pendingShare: Map<String, Any?>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -43,12 +45,17 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         CallManager.appContext = applicationContext
         dialNumber = numberFrom(intent)
+        handleShare(intent)
         val messenger = flutterEngine.dartExecutor.binaryMessenger
         MethodChannel(messenger, "nexlia/phone").setMethodCallHandler { call, result ->
             try { handle(call, result) } catch (e: Exception) { result.error("error", e.message, null) }
         }
         EventChannel(messenger, "nexlia/phone/events").setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) { sink = events }
+            override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+                sink = events
+                pendingShare?.let { events?.success(it) }
+                pendingShare = null
+            }
             override fun onCancel(arguments: Any?) { sink = null }
         })
         CallManager.listener = { snap ->
@@ -68,6 +75,7 @@ class MainActivity : FlutterActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         applyLockFlags()
+        handleShare(intent)
         val n = numberFrom(intent)
         if (n != null) sink?.success(mapOf("type" to "dial", "number" to n))
         if (intent.getBooleanExtra("call", false)) sink?.success(CallManager.snapshot())
@@ -206,15 +214,15 @@ class MainActivity : FlutterActivity() {
                 result.success(true)
             }
             "pickMedia" -> {
-                pickKind = if (call.argument<String>("kind") == "video") "video" else "image"
+                pickKind = call.argument<String>("kind") ?: "image"
                 pending = result
                 val i = Intent(Intent.ACTION_GET_CONTENT)
-                    .setType(if (pickKind == "video") "video/*" else "image/*")
+                    .setType(when (pickKind) { "video" -> "video/*"; "audio" -> "audio/*"; else -> "image/*" })
                     .addCategory(Intent.CATEGORY_OPENABLE)
                 startActivityForResult(i, REQ_PICK)
             }
             "removeMedia" -> {
-                val prefix = if (call.argument<String>("kind") == "video") "ring_video_" else "call_bg_"
+                val prefix = prefixFor(call.argument<String>("kind") ?: "image")
                 filesDir.listFiles()?.filter { it.name.startsWith(prefix) }?.forEach { it.delete() }
                 result.success(true)
             }
@@ -233,6 +241,44 @@ class MainActivity : FlutterActivity() {
             }
             "testServer" -> bg(result) { SpamEngine.test(applicationContext) }
             else -> result.notImplemented()
+        }
+    }
+
+    private fun prefixFor(kind: String) = when (kind) {
+        "video" -> "ring_video_"
+        "audio" -> "ring_tone_"
+        else -> "call_bg_"
+    }
+
+    /** Guarda una copia dentro de la app para que siga disponible siempre. */
+    private fun importMedia(kind: String, uri: Uri): String {
+        val prefix = prefixFor(kind)
+        val fromMime = MimeTypeMap.getSingleton().getExtensionFromMimeType(contentResolver.getType(uri))
+        val ext = fromMime ?: when (kind) { "video" -> "mp4"; "audio" -> "mp3"; else -> "jpg" }
+        val out = File(filesDir, prefix + System.currentTimeMillis() + "." + ext)
+        contentResolver.openInputStream(uri)?.use { input ->
+            out.outputStream().use { input.copyTo(it) }
+        } ?: throw IllegalStateException("No se pudo leer el archivo")
+        filesDir.listFiles()?.filter { it.name.startsWith(prefix) && it.name != out.name }?.forEach { it.delete() }
+        return out.absolutePath
+    }
+
+    /** Video o audio enviado desde otra app con Compartir > NEXLIA. */
+    private fun handleShare(i: Intent?) {
+        if (i?.action != Intent.ACTION_SEND) return
+        @Suppress("DEPRECATION")
+        val uri = i.getParcelableExtra<Uri>(Intent.EXTRA_STREAM) ?: return
+        val type = i.type ?: contentResolver.getType(uri) ?: ""
+        val kind = when {
+            type.startsWith("video/") -> "video"
+            type.startsWith("audio/") -> "audio"
+            else -> return
+        }
+        io.execute {
+            try {
+                val ev = mapOf("type" to "shared", "kind" to kind, "path" to importMedia(kind, uri))
+                runOnUiThread { if (sink != null) sink?.success(ev) else pendingShare = ev }
+            } catch (e: Exception) { }
         }
     }
 
@@ -314,17 +360,11 @@ class MainActivity : FlutterActivity() {
             val uri = data?.data
             if (res == null) return
             if (resultCode != RESULT_OK || uri == null) { res.success(null); return }
-            val prefix = if (pickKind == "video") "ring_video_" else "call_bg_"
-            val ext = if (pickKind == "video") ".mp4" else ".jpg"
+            val kind = pickKind
             io.execute {
                 try {
-                    // Se guarda una copia dentro de la app para que siga disponible siempre.
-                    filesDir.listFiles()?.filter { it.name.startsWith(prefix) }?.forEach { it.delete() }
-                    val out = File(filesDir, prefix + System.currentTimeMillis() + ext)
-                    contentResolver.openInputStream(uri)?.use { input ->
-                        out.outputStream().use { input.copyTo(it) }
-                    }
-                    runOnUiThread { res.success(out.absolutePath) }
+                    val path = importMedia(kind, uri)
+                    runOnUiThread { res.success(path) }
                 } catch (e: Exception) {
                     runOnUiThread { res.error("error", e.message, null) }
                 }

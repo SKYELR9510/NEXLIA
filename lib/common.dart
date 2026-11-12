@@ -48,12 +48,16 @@ class CallStyle {
   /// Video que se reproduce cuando entra una llamada ('' = ninguno).
   static final ValueNotifier<String> ringVideo = ValueNotifier<String>('');
 
+  /// Archivo de audio propio como tono de llamada ('' = tono del teléfono).
+  static final ValueNotifier<String> ringTone = ValueNotifier<String>('');
+
   /// Si el video suena en lugar del tono de llamada.
   static final ValueNotifier<bool> ringSound = ValueNotifier<bool>(true);
 
   static Future<void> load() async {
     background.value = await Native.getPref('call_bg') ?? '';
     ringVideo.value = await Native.getPref('ring_video') ?? '';
+    ringTone.value = await Native.getPref('ring_tone') ?? '';
     ringSound.value = (await Native.getPref('ring_video_sound') ?? '1') == '1';
   }
 
@@ -65,6 +69,11 @@ class CallStyle {
   static void setRingVideo(String path) {
     ringVideo.value = path;
     Native.setPref('ring_video', path);
+  }
+
+  static void setRingTone(String path) {
+    ringTone.value = path;
+    Native.setPref('ring_tone', path);
   }
 
   static void setRingSound(bool on) {
