@@ -5,6 +5,7 @@ import android.os.Handler
 import android.os.Looper
 import android.telecom.Call
 import android.telecom.CallAudioState
+import android.telecom.PhoneAccountHandle
 import android.telecom.VideoProfile
 
 /** Estado compartido de las llamadas entre el servicio, la actividad y Flutter. */
@@ -18,6 +19,19 @@ object CallManager {
 
     /** Llamadas para las que ya se intentó la elección automática de SIM. */
     private val autoTried = HashSet<Call>()
+
+    /** Llamadas cuya SIM ya eligió NEXLIA (no deben mostrar el selector). */
+    private val autoSelected = HashSet<Call>()
+
+    /** SIM elegida en el selector previo para la próxima llamada saliente. */
+    private var preselected: PhoneAccountHandle? = null
+    private var preselectedAt = 0L
+
+    /** La registra MainActivity justo antes de placeCall con EXTRA_PHONE_ACCOUNT_HANDLE. */
+    fun preselect(handle: PhoneAccountHandle) {
+        preselected = handle
+        preselectedAt = System.currentTimeMillis()
+    }
 
     private val callback = object : Call.Callback() {
         override fun onStateChanged(call: Call, state: Int) {
@@ -36,6 +50,10 @@ object CallManager {
         calls.add(call)
         call.registerCallback(callback)
         maybeAutoSelect(call)
+        // La llamada saliente ya salió con su SIM: la preselección queda usada.
+        if (call.details?.callDirection == Call.Details.DIRECTION_OUTGOING &&
+            call.state != Call.STATE_SELECT_PHONE_ACCOUNT
+        ) preselected = null
         notifyChange()
     }
 
@@ -43,6 +61,7 @@ object CallManager {
         call.unregisterCallback(callback)
         calls.remove(call)
         autoTried.remove(call)
+        autoSelected.remove(call)
         notifyChange()
     }
 
@@ -52,10 +71,24 @@ object CallManager {
      */
     private fun maybeAutoSelect(call: Call) {
         if (call.state != Call.STATE_SELECT_PHONE_ACCOUNT || !autoTried.add(call)) return
+        // 1. El usuario ya eligió la SIM en el selector previo de NEXLIA: se usa esa,
+        //    sin mostrar un segundo selector (si Telecom la ofrece).
+        val pre = preselected
+        if (pre != null && System.currentTimeMillis() - preselectedAt < 30_000) {
+            preselected = null
+            val offered = SimAccounts.availableFor(call).map { SimAccounts.key(it) }
+            if (offered.isEmpty() || SimAccounts.key(pre) in offered) {
+                autoSelected.add(call)
+                call.phoneAccountSelected(pre, false)
+                return
+            }
+        }
+        // 2. Sugerencia del sistema marcada para elegir sola.
         val suggestions = SimAccounts.suggestionsFor(call)
         val pick = SimAccounts.autoSelectKey(suggestions.map { SimAccounts.key(it.phoneAccountHandle) to it.shouldAutoSelect() })
             ?: return
         val handle = suggestions.firstOrNull { SimAccounts.key(it.phoneAccountHandle) == pick }?.phoneAccountHandle ?: return
+        autoSelected.add(call)
         call.phoneAccountSelected(handle, false)
     }
 
@@ -83,7 +116,7 @@ object CallManager {
         val name = names.getOrPut(number) {
             appContext?.let { SpamEngine.contactName(it, number) } ?: ""
         }
-        val state = CallStates.name(c.state)
+        val state = CallStates.visibleName(c.state, c in autoSelected)
         val audio = service?.callAudioState
         val ctx = appContext
         // Etiqueta de SIM solo si el equipo tiene más de una cuenta: con una SIM no cambia nada.
