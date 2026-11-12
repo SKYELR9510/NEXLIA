@@ -84,6 +84,9 @@ class Native {
   static Future<bool> toggleHold() => _bool('toggleHold');
   static Future<bool> setMuted(bool on) => _bool('setMuted', {'on': on});
   static Future<bool> setSpeaker(bool on) => _bool('setSpeaker', {'on': on});
+  static Future<bool> rejectWithMessage(String text) => _bool('rejectWithMessage', {'text': text});
+  static Future<bool> sendSms(String number) => _bool('sendSms', {'number': number});
+  static Future<bool> openWhatsApp(String number) => _bool('openWhatsApp', {'number': number});
   static Future<bool> swapCalls() => _bool('swapCalls');
   static Future<bool> mergeCalls() => _bool('mergeCalls');
   static Future<bool> setBluetooth(bool on) => _bool('setBluetooth', {'on': on});

@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/services.dart';
@@ -48,6 +50,13 @@ class _CallScreenState extends State<CallScreen> {
   Timer? closer;
   bool keypad = false;
   String typed = '';
+  ModalRoute<dynamic>? route;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    route ??= ModalRoute.of(context);
+  }
 
   @override
   void initState() {
@@ -70,7 +79,7 @@ class _CallScreenState extends State<CallScreen> {
         if (!mounted) return;
         final s = now['state'];
         if (s == 'none' || s == 'disconnected') {
-          Navigator.of(context).pop();
+          _close();
         } else {
           closer = null;
           setState(() => st = now);
@@ -125,6 +134,9 @@ class _CallScreenState extends State<CallScreen> {
     final video = CallStyle.ringVideo.value;
     final bg = CallStyle.background.value;
     final tone = CallStyle.ringTone.value;
+    final known = AppData.i.contactFor(number);
+    // Sin fondo propio, la foto del contacto se usa desenfocada como fondo.
+    final photoContact = (known != null && known.hasPhoto) ? known : null;
 
     return PopScope(
       canPop: false,
@@ -166,8 +178,10 @@ class _CallScreenState extends State<CallScreen> {
                   Positioned.fill(
                     child: Image.file(File(bg),
                         fit: BoxFit.cover, errorBuilder: (context, _, __) => const SizedBox()),
-                  ),
-                if ((ringing && video.isNotEmpty) || bg.isNotEmpty)
+                  )
+                else if (photoContact != null)
+                  Positioned.fill(child: _BlurPhoto(contact: photoContact)),
+                if ((ringing && video.isNotEmpty) || bg.isNotEmpty || photoContact != null)
                   Positioned.fill(
                     // Oscurece el fondo para que el texto y los botones se lean.
                     child: Container(
@@ -231,6 +245,7 @@ class _CallScreenState extends State<CallScreen> {
                   const Spacer(),
                   if (keypad && !ringing && !ended) _dtmfPad(),
                   if (!keypad && !ringing && !ended) _controls(),
+                  if (ringing && number.isNotEmpty) _quickReply(),
                   const SizedBox(height: 28),
                   if (ringing)
                     Padding(
@@ -329,9 +344,55 @@ class _CallScreenState extends State<CallScreen> {
     );
   }
 
+  Widget _quickReply() {
+    return CupertinoButton(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+      color: const Color(0x33FFFFFF),
+      borderRadius: BorderRadius.circular(22),
+      onPressed: () async {
+        const options = [
+          'Te llamo en un momento.',
+          'Estoy ocupado, te escribo luego.',
+          '¿Me escribes por WhatsApp?',
+        ];
+        final pick = await showCupertinoModalPopup<String>(
+          context: context,
+          builder: (ctx) => CupertinoActionSheet(
+            title: const Text('Rechazar y enviar un mensaje'),
+            actions: [
+              for (final o in options)
+                CupertinoActionSheetAction(onPressed: () => Navigator.pop(ctx, o), child: Text(o)),
+            ],
+            cancelButton: CupertinoActionSheetAction(
+                onPressed: () => Navigator.pop(ctx), child: const Text('Cancelar')),
+          ),
+        );
+        if (pick != null) Native.rejectWithMessage(pick);
+      },
+      child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(CupertinoIcons.chat_bubble_fill, color: CupertinoColors.white, size: 16),
+          SizedBox(width: 8),
+          Text('Responder con mensaje',
+              style: TextStyle(
+                  color: CupertinoColors.white, fontSize: 14, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+
+  /// Cierra esta pantalla aunque tenga un menú abierto encima.
+  void _close() {
+    final nav = Navigator.of(context);
+    final r = route;
+    if (r != null) nav.popUntil((x) => x == r);
+    nav.pop();
+  }
+
   void _minimize() {
     CallScreen.minimized.value = true;
-    Navigator.of(context).pop();
+    _close();
   }
 
   void _addCall() {
@@ -488,6 +549,37 @@ class _RingVideoState extends State<RingVideo> {
         fit: BoxFit.cover,
         child: SizedBox(width: size.width, height: size.height, child: VideoPlayer(ctrl)),
       ),
+    );
+  }
+}
+
+/// Foto del contacto desenfocada, como fondo de la llamada.
+class _BlurPhoto extends StatelessWidget {
+  const _BlurPhoto({required this.contact});
+  final Contact contact;
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List?>(
+      future: Native.contactPhoto(contact.id, big: true),
+      builder: (context, snap) {
+        final bytes = snap.data;
+        if (bytes == null || bytes.isEmpty) return const SizedBox();
+        return ClipRect(
+          child: Transform.scale(
+            scale: 1.2,
+            child: ImageFiltered(
+              imageFilter: ImageFilter.blur(sigmaX: 26, sigmaY: 26),
+              child: Image.memory(bytes,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  gaplessPlayback: true,
+                  errorBuilder: (context, _, __) => const SizedBox()),
+            ),
+          ),
+        );
+      },
     );
   }
 }

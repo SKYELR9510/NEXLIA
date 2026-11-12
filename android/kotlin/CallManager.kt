@@ -83,6 +83,12 @@ object CallManager {
         if (c.state == Call.STATE_RINGING) c.reject(false, null) else c.disconnect()
     }
 
+    /** Rechaza la llamada entrante y le envía un SMS a quien llama. */
+    fun rejectWithMessage(text: String) {
+        val c = current ?: return
+        if (c.state == Call.STATE_RINGING) c.reject(true, text)
+    }
+
     fun toggleHold() {
         val c = current ?: return
         if (c.state == Call.STATE_HOLDING) c.unhold() else if (c.state == Call.STATE_ACTIVE) c.hold()

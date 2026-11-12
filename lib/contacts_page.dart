@@ -3,10 +3,12 @@ import 'package:flutter/cupertino.dart';
 import 'common.dart';
 import 'native.dart';
 
-void openContact(BuildContext context, Contact c) {
-  Navigator.of(context, rootNavigator: true)
-      .push(CupertinoPageRoute<void>(builder: (_) => ContactDetail(contact: c)));
+void openDetail(BuildContext context, {Contact? contact, String number = ''}) {
+  Navigator.of(context, rootNavigator: true).push(CupertinoPageRoute<void>(
+      builder: (_) => ContactDetail(contact: contact, number: number)));
 }
+
+void openContact(BuildContext context, Contact c) => openDetail(context, contact: c);
 
 class ContactsPage extends StatefulWidget {
   const ContactsPage({super.key});
@@ -253,9 +255,11 @@ class _ContactsPageState extends State<ContactsPage> {
   }
 }
 
+/// Ficha de un contacto o de un número que no está en la agenda.
 class ContactDetail extends StatefulWidget {
-  const ContactDetail({super.key, required this.contact});
-  final Contact contact;
+  const ContactDetail({super.key, this.contact, this.number = ''});
+  final Contact? contact;
+  final String number;
 
   @override
   State<ContactDetail> createState() => _ContactDetailState();
@@ -263,6 +267,11 @@ class ContactDetail extends StatefulWidget {
 
 class _ContactDetailState extends State<ContactDetail> {
   List<String> blocked = [];
+
+  Contact? get c => widget.contact;
+  List<String> get numbers =>
+      c?.numbers ?? (widget.number.isEmpty ? <String>[] : <String>[widget.number]);
+  String get mainNumber => numbers.isEmpty ? '' : numbers.first;
 
   @override
   void initState() {
@@ -276,12 +285,11 @@ class _ContactDetailState extends State<ContactDetail> {
   }
 
   bool get isBlocked =>
-      widget.contact.numbers.isNotEmpty &&
-      widget.contact.numbers.every((n) => blocked.any((b) => sameNumber(b, n)));
+      numbers.isNotEmpty && numbers.every((n) => blocked.any((b) => sameNumber(b, n)));
 
   Future<void> _toggleBlock() async {
     final was = isBlocked;
-    for (final n in widget.contact.numbers) {
+    for (final n in numbers) {
       if (was) {
         await Native.unblockNumber(n);
       } else {
@@ -292,99 +300,227 @@ class _ContactDetailState extends State<ContactDetail> {
   }
 
   Future<void> _toggleStar() async {
-    final c = widget.contact;
-    setState(() => c.starred = !c.starred);
-    await Native.setStarred(c.id, c.starred);
+    final contact = c;
+    if (contact == null) return;
+    setState(() => contact.starred = !contact.starred);
+    await Native.setStarred(contact.id, contact.starred);
     await AppData.i.reload();
   }
 
   Future<void> _delete() async {
-    if (!await confirm(context, '¿Eliminar a ${widget.contact.name}?', 'Eliminar')) return;
-    await Native.deleteContact(widget.contact.id);
+    final contact = c;
+    if (contact == null) return;
+    if (!await confirm(context, '¿Eliminar a ${contact.name}?', 'Eliminar')) return;
+    await Native.deleteContact(contact.id);
     await AppData.i.reload();
     if (mounted) Navigator.pop(context);
   }
 
+  Future<void> _addContact() async {
+    final r = await askText(context, 'Nuevo contacto', hints: ['Nombre']);
+    if (r == null || r[0].isEmpty) return;
+    await Native.addContact(r[0], mainNumber);
+    await AppData.i.reload();
+    if (mounted) Navigator.pop(context);
+  }
+
+  Widget _action(IconData icon, String text, Color color, VoidCallback onTap) {
+    return Expanded(
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: color.withOpacity(0.16)),
+              child: Icon(icon, color: color, size: 25),
+            ),
+            const SizedBox(height: 7),
+            Text(text,
+                maxLines: 1,
+                style: TextStyle(
+                    fontSize: 12, fontWeight: FontWeight.w600, color: labelColor(context))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _header(String text) => Padding(
+        padding: const EdgeInsets.fromLTRB(30, 20, 30, 8),
+        child: Text(text,
+            style: TextStyle(
+                fontSize: 14, fontWeight: FontWeight.w700, color: secondaryColor(context))),
+      );
+
+  Widget _card(List<Widget> rows) {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration:
+          BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(18)),
+      child: Column(
+        children: [
+          for (var i = 0; i < rows.length; i++) ...[
+            if (i > 0)
+              Container(
+                  height: 0.6,
+                  margin: const EdgeInsets.only(left: 16),
+                  color: separatorColor(context)),
+            rows[i],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _line(Widget child, {VoidCallback? onTap}) => GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13), child: child),
+      );
+
+  Widget _danger(String text, VoidCallback onTap) => _line(
+      Row(children: [
+        Expanded(
+            child: Text(text, style: const TextStyle(fontSize: 16, color: Color(0xFFFF3B30)))),
+      ]),
+      onTap: onTap);
+
   @override
   Widget build(BuildContext context) {
-    final c = widget.contact;
+    final contact = c;
+    final name = contact?.name ?? (mainNumber.isEmpty ? 'Número oculto' : mainNumber);
+    final history = AppData.i.calls
+        .where((e) => numbers.any((n) => sameNumber(n, e.number)))
+        .take(15)
+        .toList();
     return CupertinoPageScaffold(
       backgroundColor: groupedBg(context),
       navigationBar: CupertinoNavigationBar(
         previousPageTitle: 'Atrás',
         backgroundColor: groupedBg(context),
         border: null,
-        trailing: CupertinoButton(
-          padding: EdgeInsets.zero,
-          onPressed: _toggleStar,
-          child: Icon(c.starred ? CupertinoIcons.star_fill : CupertinoIcons.star, size: 24),
-        ),
       ),
       child: SafeArea(
         child: ListView(
+          padding: const EdgeInsets.only(bottom: 28),
           children: [
-            const SizedBox(height: 12),
-            Center(child: Avatar(c.name, size: 104, contact: c)),
-            const SizedBox(height: 12),
-            Text(c.name,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 28, fontWeight: FontWeight.w600, color: labelColor(context))),
-            const SizedBox(height: 16),
-            if (c.numbers.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: CupertinoButton(
-                  color: const Color(0xFF34C759),
-                  borderRadius: BorderRadius.circular(16),
-                  onPressed: () => callNumber(context, c.numbers.first),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(CupertinoIcons.phone_fill, color: CupertinoColors.white, size: 20),
-                      SizedBox(width: 8),
-                      Text('Llamar',
-                          style: TextStyle(color: CupertinoColors.white, fontWeight: FontWeight.w600)),
-                    ],
-                  ),
+            const SizedBox(height: 8),
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(3),
+                decoration:
+                    BoxDecoration(shape: BoxShape.circle, gradient: brandGradient(context)),
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(shape: BoxShape.circle, color: groupedBg(context)),
+                  child: Avatar(contact?.name ?? '', size: 112, contact: contact),
                 ),
               ),
-            CupertinoListSection.insetGrouped(
-            backgroundColor: const Color(0x00000000),
-            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
-              children: [
-                for (final n in c.numbers)
-                  CupertinoListTile(
-                    title: Text('móvil', style: TextStyle(fontSize: 14, color: labelColor(context))),
-                    subtitle: Text(n,
-                        style: TextStyle(
-                            fontSize: 17, color: accentColor(context))),
-                    onTap: () => callNumber(context, n),
-                  ),
-                if (c.numbers.isEmpty) const CupertinoListTile(title: Text('Sin número')),
-              ],
             ),
-            CupertinoListSection.insetGrouped(
-            backgroundColor: const Color(0x00000000),
-            decoration: BoxDecoration(color: cardColor(context), borderRadius: BorderRadius.circular(14)),
-              children: [
-                CupertinoListTile(
-                  title: Text(c.starred ? 'Quitar de favoritos' : 'Añadir a favoritos',
-                      style: TextStyle(color: accentColor(context))),
-                  onTap: _toggleStar,
-                ),
-                if (c.numbers.isNotEmpty)
-                  CupertinoListTile(
-                    title: Text(isBlocked ? 'Desbloquear contacto' : 'Bloquear contacto',
-                        style: TextStyle(color: CupertinoColors.systemRed.resolveFrom(context))),
-                    onTap: _toggleBlock,
-                  ),
-                CupertinoListTile(
-                  title: Text('Eliminar contacto',
-                      style: TextStyle(color: CupertinoColors.systemRed.resolveFrom(context))),
-                  onTap: _delete,
-                ),
-              ],
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Text(name,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                      fontSize: 26, fontWeight: FontWeight.w700, color: labelColor(context))),
             ),
+            if (contact != null && mainNumber.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Text(mainNumber,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: 15, color: secondaryColor(context))),
+              ),
+            if (isBlocked)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: Text('Bloqueado',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w700, color: Color(0xFFFF3B30))),
+              ),
+            const SizedBox(height: 20),
+            if (mainNumber.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    _action(CupertinoIcons.phone_fill, 'Llamar', const Color(0xFF1FC24A),
+                        () => callNumber(context, mainNumber)),
+                    _action(CupertinoIcons.chat_bubble_fill, 'Mensaje', accentColor(context),
+                        () => Native.sendSms(mainNumber)),
+                    _action(CupertinoIcons.chat_bubble_2_fill, 'WhatsApp', const Color(0xFF25D366),
+                        () => Native.openWhatsApp(mainNumber)),
+                    if (contact != null)
+                      _action(contact.starred ? CupertinoIcons.star_fill : CupertinoIcons.star,
+                          'Favorito', const Color(0xFFFFB300), _toggleStar)
+                    else
+                      _action(CupertinoIcons.person_add, 'Añadir', accentColor(context), _addContact),
+                  ],
+                ),
+              ),
+            if (numbers.length > 1) ...[
+              _header('Números'),
+              _card([
+                for (final n in numbers)
+                  _line(
+                      Row(children: [
+                        Expanded(
+                            child: Text(n,
+                                style: TextStyle(fontSize: 16, color: labelColor(context)))),
+                        Icon(CupertinoIcons.phone_fill, size: 19, color: accentColor(context)),
+                      ]),
+                      onTap: () => callNumber(context, n)),
+              ]),
+            ],
+            _header('Historial'),
+            _card([
+              if (history.isEmpty)
+                _line(Row(children: [
+                  Text('Sin llamadas',
+                      style: TextStyle(fontSize: 15, color: secondaryColor(context))),
+                ])),
+              for (final e in history)
+                _line(Row(
+                  children: [
+                    Icon(callIcon(e), size: 16, color: callColor(context, e)),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(callKind(e),
+                              style: TextStyle(fontSize: 15, color: labelColor(context))),
+                          Text(formatWhenLong(e.date),
+                              style: TextStyle(fontSize: 13, color: secondaryColor(context))),
+                        ],
+                      ),
+                    ),
+                    if (e.duration > 0)
+                      Text(formatDuration(e.duration),
+                          style: TextStyle(fontSize: 13, color: secondaryColor(context))),
+                  ],
+                )),
+            ]),
+            if (numbers.isNotEmpty || contact != null) ...[
+              const SizedBox(height: 20),
+              _card([
+                if (numbers.isNotEmpty)
+                  _danger(isBlocked ? 'Desbloquear' : 'Bloquear número', _toggleBlock),
+                if (contact == null && mainNumber.isNotEmpty)
+                  _danger('Reportar como spam', () async {
+                    await reportFlow(context, mainNumber);
+                    await _load();
+                  }),
+                if (contact != null) _danger('Eliminar contacto', _delete),
+              ]),
+            ],
           ],
         ),
       ),

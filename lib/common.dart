@@ -83,7 +83,42 @@ class CallStyle {
 }
 
 /// Espacio que ocupa la barra inferior, incluida la barra de navegación del sistema.
-double barSpace(BuildContext c) => 62 + MediaQuery.of(c).padding.bottom;
+double barSpace(BuildContext c) => 68 + MediaQuery.of(c).padding.bottom;
+
+/// Degradado de marca: del celeste del icono al color de tema elegido.
+LinearGradient brandGradient(BuildContext c) {
+  final a = accentColor(c);
+  return LinearGradient(
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+    colors: [Color.lerp(a, const Color(0xFF19E3FF), 0.65)!, a],
+  );
+}
+
+String callKind(CallEntry e) {
+  switch (e.type) {
+    case 1:
+      return 'Entrante';
+    case 2:
+      return 'Saliente';
+    case 3:
+      return 'Perdida';
+    case 5:
+      return 'Rechazada';
+    case 6:
+      return 'Bloqueada';
+    default:
+      return 'Llamada';
+  }
+}
+
+IconData callIcon(CallEntry e) => e.missed
+    ? CupertinoIcons.xmark
+    : (e.type == 2 ? CupertinoIcons.arrow_up_right : CupertinoIcons.arrow_down_left);
+
+Color callColor(BuildContext c, CallEntry e) => e.missed
+    ? const Color(0xFFFF3B30)
+    : (e.type == 2 ? secondaryColor(c) : const Color(0xFF12B83C));
 
 /// Encabezado y pie pequeños para las secciones agrupadas.
 Widget sectionLabel(BuildContext c, String text) => Text(text,
@@ -115,7 +150,8 @@ class Pill extends StatelessWidget {
         duration: const Duration(milliseconds: 160),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
         decoration: BoxDecoration(
-          color: selected ? accentColor(context) : fillColor(context),
+          gradient: selected ? brandGradient(context) : null,
+          color: selected ? null : fillColor(context),
           borderRadius: BorderRadius.circular(22),
         ),
         child: Text(text,
@@ -216,6 +252,23 @@ String formatWhenLong(DateTime d) {
     return '${names[d.weekday - 1]}, $t';
   }
   return '${_two(d.day)}/${_two(d.month)}/${d.year % 100}';
+}
+
+String formatTime(DateTime d) {
+  final h = d.hour % 12 == 0 ? 12 : d.hour % 12;
+  return '$h:${_two(d.minute)} ${d.hour < 12 ? 'a. m.' : 'p. m.'}';
+}
+
+String formatDay(DateTime d) {
+  final now = DateTime.now();
+  final diff = DateTime(now.year, now.month, now.day)
+      .difference(DateTime(d.year, d.month, d.day))
+      .inDays;
+  if (diff == 0) return 'Hoy';
+  if (diff == 1) return 'Ayer';
+  const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+  const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+  return '${days[d.weekday - 1]} ${d.day} de ${months[d.month - 1]}';
 }
 
 String formatDuration(int seconds) {

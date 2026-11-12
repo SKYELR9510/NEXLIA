@@ -176,6 +176,23 @@ class MainActivity : FlutterActivity() {
             "toggleHold" -> { CallManager.toggleHold(); result.success(true) }
             "setMuted" -> { CallManager.setMuted(call.argument<Boolean>("on") == true); result.success(true) }
             "setSpeaker" -> { CallManager.setSpeaker(call.argument<Boolean>("on") == true); result.success(true) }
+            "rejectWithMessage" -> {
+                CallManager.rejectWithMessage(call.argument<String>("text") ?: "")
+                result.success(true)
+            }
+            "sendSms" -> {
+                val n = call.argument<String>("number") ?: ""
+                result.success(try {
+                    startActivity(Intent(Intent.ACTION_SENDTO, Uri.fromParts("smsto", n, null))); true
+                } catch (e: Exception) { false })
+            }
+            "openWhatsApp" -> {
+                var d = (call.argument<String>("number") ?: "").filter { it.isDigit() }
+                if (d.length == 9 && d.startsWith("9")) d = "51$d"
+                result.success(try {
+                    startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$d"))); true
+                } catch (e: Exception) { false })
+            }
             "swapCalls" -> { CallManager.swap(); result.success(true) }
             "mergeCalls" -> { CallManager.merge(); result.success(true) }
             "setBluetooth" -> { CallManager.setBluetooth(call.argument<Boolean>("on") == true); result.success(true) }

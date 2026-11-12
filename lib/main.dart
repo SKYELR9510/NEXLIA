@@ -255,6 +255,14 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 180),
+                width: on ? 26 : 0,
+                height: 3,
+                margin: const EdgeInsets.only(bottom: 5),
+                decoration: BoxDecoration(
+                    gradient: brandGradient(context), borderRadius: BorderRadius.circular(2)),
+              ),
               Icon(icon, size: 24, color: color),
               const SizedBox(height: 3),
               Text(text,
