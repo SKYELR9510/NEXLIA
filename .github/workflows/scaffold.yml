@@ -28,4 +28,4 @@ jobs:
           echo "=== settings.gradle.kts ==="; cat android/settings.gradle.kts
           echo "=== pubspec.yaml ==="; cat pubspec.yaml
           tar czf /tmp/s.tgz .
-          echo "TGZ_BEGIN"; base64 -w0 /tmp/s.tgz; echo; echo "TGZ_END"
+          echo "TGZ_BEGIN"; base64 -w 76 /tmp/s.tgz; echo "TGZ_END"
