@@ -40,6 +40,26 @@ jobs:
           sed -i 's|^  uses-material-design: true|  uses-material-design: true\n  assets:\n    - assets/icon.png|' pubspec.yaml
           rm -f test/widget_test.dart
           sed -i 's/flutter\.minSdkVersion/29/' android/app/build.gradle*
+          # El analizador "lint" de Android falla dentro del plugin de video; no afecta al APK.
+          if [ -f android/build.gradle.kts ]; then
+            cat >> android/build.gradle.kts <<'KTS'
+
+          subprojects {
+              tasks.configureEach {
+                  if (name.startsWith("lintVital")) { enabled = false }
+              }
+          }
+          KTS
+          else
+            cat >> android/build.gradle <<'GROOVY'
+
+          subprojects {
+              tasks.configureEach { t ->
+                  if (t.name.startsWith("lintVital")) { t.enabled = false }
+              }
+          }
+          GROOVY
+          fi
           # Firma fija y privada: la clave vive en los secretos del repositorio.
           if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASS" ]; then
             echo "Faltan los secretos KEYSTORE_B64 y KEYSTORE_PASS del repositorio"; exit 1

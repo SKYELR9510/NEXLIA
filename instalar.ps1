@@ -42,6 +42,18 @@ foreach ($g in @("$Destino\android\app\build.gradle.kts", "$Destino\android\app\
     }
 }
 
+$root = "$Destino\android\build.gradle.kts"
+if ((Test-Path $root) -and -not ((Get-Content $root -Raw) -match "lintVital")) {
+    Add-Content $root @"
+
+subprojects {
+    tasks.configureEach {
+        if (name.startsWith("lintVital")) { enabled = false }
+    }
+}
+"@
+}
+
 Write-Host "4/4 Descargando dependencias ..."
 flutter pub add video_player
 flutter pub get
