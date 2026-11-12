@@ -1,0 +1,31 @@
+name: Generar plantilla (temporal)
+on:
+  push:
+    branches: [tmp/scaffold-3.50.0]
+jobs:
+  gen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+      - run: |
+          flutter --version
+          mkdir app && cd app
+          flutter create --org com.nexlia --project-name phone --platforms android .
+          flutter pub add 'video_player:^2.14.1'
+          flutter pub get
+          rm -rf lib test android/app/src/main/kotlin android/app/src/main/java build .dart_tool .idea *.iml android/.gradle
+          find android/app/src/main/res -name 'ic_launcher*' -delete
+          find . -type f | sort
+          echo "=== app/build.gradle.kts ==="; cat android/app/build.gradle.kts
+          echo "=== build.gradle.kts ==="; cat android/build.gradle.kts
+          echo "=== settings.gradle.kts ==="; cat android/settings.gradle.kts
+          echo "=== pubspec.yaml ==="; cat pubspec.yaml
+          tar czf /tmp/s.tgz .
+          echo "TGZ_BEGIN"; base64 -w0 /tmp/s.tgz; echo; echo "TGZ_END"
