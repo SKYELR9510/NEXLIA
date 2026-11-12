@@ -124,7 +124,13 @@ class CallService : InCallService() {
             b.addAction(Notification.Action.Builder(null, "Rechazar", action("hangup", 1)).build())
             b.addAction(Notification.Action.Builder(null, "Contestar", action("answer", 2)).build())
         } else {
-            b.setContentText(if (state == "dialing") "Llamando…" else "Llamada en curso")
+            b.setContentText(
+                when (state) {
+                    "dialing" -> "Llamando…"
+                    "selectAccount" -> "Elige una SIM para llamar"
+                    else -> "Llamada en curso"
+                }
+            )
             b.addAction(Notification.Action.Builder(null, "Colgar", action("hangup", 1)).build())
         }
         nm.notify(notifId, b.build())

@@ -193,6 +193,8 @@ class MainActivity : FlutterActivity() {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$d"))); true
                 } catch (e: Exception) { false })
             }
+            "selectPhoneAccount" -> result.success(CallManager.selectAccount(call.argument<String>("key") ?: ""))
+            "getSimAccounts" -> result.success(SimAccounts.list(this).map { it.toMap() })
             "swapCalls" -> { CallManager.swap(); result.success(true) }
             "mergeCalls" -> { CallManager.merge(); result.success(true) }
             "setBluetooth" -> { CallManager.setBluetooth(call.argument<Boolean>("on") == true); result.success(true) }
@@ -335,7 +337,8 @@ class MainActivity : FlutterActivity() {
             .appendQueryParameter(CallLog.Calls.LIMIT_PARAM_KEY, "300").build()
         val cols = arrayOf(
             CallLog.Calls._ID, CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME,
-            CallLog.Calls.TYPE, CallLog.Calls.DATE, CallLog.Calls.DURATION
+            CallLog.Calls.TYPE, CallLog.Calls.DATE, CallLog.Calls.DURATION,
+            CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME, CallLog.Calls.PHONE_ACCOUNT_ID
         )
         contentResolver.query(uri, cols, null, null, CallLog.Calls.DATE + " DESC")?.use { c ->
             while (c.moveToNext()) {
@@ -345,7 +348,8 @@ class MainActivity : FlutterActivity() {
                     "name" to (c.getString(2) ?: ""),
                     "callType" to c.getInt(3),
                     "date" to c.getLong(4),
-                    "duration" to c.getLong(5)
+                    "duration" to c.getLong(5),
+                    "account" to SimAccounts.key(c.getString(6), c.getString(7))
                 ))
             }
         }
