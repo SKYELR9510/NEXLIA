@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phone/messaging/models.dart';
 import 'package:phone/messaging/sms_repository.dart';
+import 'package:phone/messaging/store.dart';
 import 'package:phone/native.dart';
 
 import 'fakes.dart';
