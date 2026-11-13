@@ -167,7 +167,7 @@ class HttpChatApi implements ChatApi {
   @override
   Future<List<ChatMessage>> fetchMessages(String conversationId, {String? before, int limit = 50}) async {
     final data = _object(await _request('GET', 'v1/conversations/${Uri.encodeComponent(conversationId)}/messages',
-        query: {'limit': '$limit', if (before != null) 'before': before}));
+        query: {'limit': '$limit', 'before': ?before}));
     final list = (data['messages'] as List?) ?? const [];
     return list.whereType<Map>().map((m) => _message(m, conversationId)).toList();
   }

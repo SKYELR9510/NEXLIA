@@ -150,7 +150,7 @@ class ChannelTag extends StatelessWidget {
     final color = chat ? chatColor(context) : smsColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: color.withOpacity(0.14), borderRadius: BorderRadius.circular(6)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.14), borderRadius: BorderRadius.circular(6)),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -173,7 +173,7 @@ class DemoTag extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: CupertinoColors.systemOrange.resolveFrom(context).withOpacity(0.18),
+        color: CupertinoColors.systemOrange.resolveFrom(context).withValues(alpha: 0.18),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Text('PRUEBA',
@@ -226,7 +226,8 @@ class _InboxRow extends StatelessWidget {
               Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Avatar(i.title, size: 50),
+                  // Sin el sufijo "(prueba)" para que las iniciales sean letras.
+                  Avatar(i.title.replaceAll(RegExp(r'\s*\(.*?\)'), ''), size: 50),
                   Positioned(
                     right: -2,
                     bottom: -2,
@@ -339,7 +340,7 @@ class _Banner extends StatelessWidget {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-      decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(16)),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(16)),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -385,7 +386,7 @@ class _ChatStatusBanner extends StatelessWidget {
       title: 'NEXLIA Chat aún no está conectado',
       text: hasDemo
           ? 'Todavía no hay servidor de Chat. Las conversaciones marcadas PRUEBA son de demostración y no se envían a nadie.'
-          : 'Todavía no hay servidor de Chat, así que no hay conversaciones por Internet. Tus SMS sí se muestran aquí.',
+          : 'Todavía no hay servidor de Chat, así que no hay conversaciones por Internet.',
     );
   }
 }

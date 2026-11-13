@@ -290,11 +290,11 @@ List<(ChatConversation, List<ChatMessage>)> demoConversations(DateTime now) {
       [
         msg('demo-equipo', 1, false, 'Esta es una conversación de prueba de NEXLIA Chat.',
             const Duration(hours: 5), ChatMessageStatus.read),
-        msg('demo-equipo', 2, true, 'Entregado', const Duration(hours: 4), ChatMessageStatus.delivered),
-        msg('demo-equipo', 3, true, 'Enviado', const Duration(hours: 3, minutes: 30), ChatMessageStatus.sent),
-        msg('demo-equipo', 4, true, 'Sin enviar (fallido)', const Duration(hours: 3, minutes: 10),
+        msg('demo-equipo', 2, true, 'Te paso el resumen de la reunión.', const Duration(hours: 4), ChatMessageStatus.delivered),
+        msg('demo-equipo', 3, true, '¿Revisaste la propuesta?', const Duration(hours: 3, minutes: 30), ChatMessageStatus.sent),
+        msg('demo-equipo', 4, true, 'Este mensaje de prueba muestra un fallo.', const Duration(hours: 3, minutes: 10),
             ChatMessageStatus.failed),
-        msg('demo-equipo', 5, true, 'Pendiente', const Duration(hours: 3), ChatMessageStatus.pending),
+        msg('demo-equipo', 5, true, 'Y este, uno pendiente.', const Duration(hours: 3), ChatMessageStatus.pending),
       ],
     ),
   ];
