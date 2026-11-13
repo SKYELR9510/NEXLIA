@@ -1,0 +1,26 @@
+NEXLIA - APK de validación P0 (PR #1 a #6 integrados)
+
+Instalación (sin desinstalar la versión actual)
+1. Inicia sesión en github.com y descarga el artefacto NEXLIA-validacion-P0 (zip).
+2. Descomprime y comprueba la huella: el SHA-256 de NEXLIA-validacion-P0.apk debe ser
+   el del archivo NEXLIA-validacion-P0.apk.sha256.
+   Windows: certutil -hashfile NEXLIA-validacion-P0.apk SHA256
+3. Abre NEXLIA-validacion-P0.apk en el teléfono y elige "Actualizar".
+   Misma firma y mismo paquete que v1.0.13: se conservan ajustes y datos.
+4. Abre NEXLIA y confirma que sigue como Teléfono predeterminado.
+Para volver a la versión oficial: reinstala v1.0.13 de Releases o instala la siguiente
+versión oficial (1.0.14 o superior); ambas se instalan encima.
+
+Validación en teléfono físico
+[ ] Una SIM: llamar y recibir igual que en v1.0.13.
+[ ] Dos SIM, "Preguntar siempre": aparece el selector ANTES de llamar; cada SIM sale por su línea.
+[ ] Dos SIM, SIM predeterminada en Android: el selector de NEXLIA aparece igual.
+[ ] "Usar siempre esta SIM" y Más > SIM para llamar: la preferencia persiste tras cerrar la app.
+[ ] Desactivar la SIM guardada: aviso y nueva selección; nunca llama por una SIM inválida.
+[ ] Cancelar el selector: no llama.
+[ ] Llamada desde otra app (WhatsApp, navegador "tel:"): un solo selector como máximo.
+[ ] Recientes: etiqueta de SIM con dos SIM; sin etiqueta con una.
+[ ] Entrante con pantalla bloqueada; contestar y rechazar desde la notificación.
+[ ] Bloqueo: número desconocido con "Rechazar"; aparece en "Llamadas filtradas".
+[ ] Al arrancar, tocar "Activar" enseguida: la app no se queda esperando.
+[ ] Girar o cerrar la app con un diálogo del sistema abierto: sin bloqueos.
