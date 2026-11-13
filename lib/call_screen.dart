@@ -24,7 +24,9 @@ class CallScreen extends StatefulWidget {
       {bool force = false}) {
     final n = nav.currentState;
     final st = state['state'];
-    if (force || st == 'ringing' || st == 'dialing') minimized.value = false;
+    if (force || st == 'ringing' || st == 'dialing' || st == 'selectAccount') {
+      minimized.value = false;
+    }
     if (_open || n == null || minimized.value) return;
     _open = true;
     n
@@ -106,6 +108,8 @@ class _CallScreenState extends State<CallScreen> {
         return 'Llamada entrante…';
       case 'dialing':
         return 'Llamando…';
+      case 'selectAccount':
+        return 'Elige una SIM';
       case 'holding':
         return 'En espera';
       case 'active':
@@ -130,6 +134,11 @@ class _CallScreenState extends State<CallScreen> {
     final spam = (st['spam'] ?? '').toString();
     final ringing = state == 'ringing';
     final ended = state == 'disconnected';
+    final choosingSim = state == 'selectAccount';
+    final accounts = ((st['accounts'] as List?) ?? const [])
+        .map((a) => SimInfo.fromMap(a as Map))
+        .toList();
+    final sim = (st['sim'] ?? '').toString();
 
     final video = CallStyle.ringVideo.value;
     final bg = CallStyle.background.value;
@@ -232,6 +241,20 @@ class _CallScreenState extends State<CallScreen> {
                       child: Text(number,
                           style: const TextStyle(fontSize: 17, color: Color(0x99FFFFFF))),
                     ),
+                  if (sim.isNotEmpty && !choosingSim)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                        decoration: BoxDecoration(
+                            color: const Color(0x2EFFFFFF), borderRadius: BorderRadius.circular(12)),
+                        child: Text(sim,
+                            style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: CupertinoColors.white)),
+                      ),
+                    ),
                   if (spam.isNotEmpty)
                     Container(
                       margin: const EdgeInsets.only(top: 14),
@@ -243,8 +266,12 @@ class _CallScreenState extends State<CallScreen> {
                               color: Color(0xFFFF6961), fontSize: 14, fontWeight: FontWeight.w600)),
                     ),
                   const Spacer(),
-                  if (keypad && !ringing && !ended) _dtmfPad(),
-                  if (!keypad && !ringing && !ended) _controls(),
+                  if (choosingSim)
+                    _simPicker(accounts)
+                  else if (keypad && !ringing && !ended)
+                    _dtmfPad()
+                  else if (!keypad && !ringing && !ended)
+                    _controls(),
                   if (ringing && number.isNotEmpty) _quickReply(),
                   const SizedBox(height: 28),
                   if (ringing)
@@ -262,7 +289,8 @@ class _CallScreenState extends State<CallScreen> {
                     )
                   else if (!ended)
                     _round(CupertinoIcons.phone_down_fill, const Color(0xFFFF3B30),
-                        keypad ? 'Ocultar teclado' : 'Finalizar', Native.hangup,
+                        choosingSim ? 'Cancelar' : (keypad ? 'Ocultar teclado' : 'Finalizar'),
+                        Native.hangup,
                         onLabelTap: keypad ? () => setState(() => keypad = false) : null),
                   const SizedBox(height: 44),
                 ],
@@ -437,6 +465,79 @@ class _CallScreenState extends State<CallScreen> {
                   btAvailable ? () => Native.setBluetooth(!bluetooth) : null),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  /// Selector de SIM: aparece solo cuando Telecom pide elegir cuenta (doble SIM
+  /// con "Preguntar siempre"). Con una SIM nunca se muestra.
+  Widget _simPicker(List<SimInfo> accounts) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        children: [
+          const Text('¿Con qué SIM quieres llamar?',
+              style: TextStyle(
+                  color: CupertinoColors.white, fontSize: 17, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 16),
+          if (accounts.isEmpty)
+            const Text('No se pudieron leer las SIM del teléfono.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Color(0xB3FFFFFF), fontSize: 15)),
+          for (final a in accounts)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  Native.selectPhoneAccount(a.key);
+                },
+                child: Container(
+                  height: 64,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                      color: const Color(0x2EFFFFFF), borderRadius: BorderRadius.circular(18)),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 36,
+                        height: 36,
+                        alignment: Alignment.center,
+                        decoration: const BoxDecoration(
+                            shape: BoxShape.circle, color: CupertinoColors.white),
+                        child: Text('${a.slot}',
+                            style: const TextStyle(
+                                color: Color(0xFF0A2A6E),
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700)),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(a.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                    color: CupertinoColors.white,
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w600)),
+                            if (a.number.isNotEmpty)
+                              Text(a.number,
+                                  style: const TextStyle(color: Color(0x99FFFFFF), fontSize: 13)),
+                          ],
+                        ),
+                      ),
+                      const Icon(CupertinoIcons.phone_fill, color: CupertinoColors.white, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
