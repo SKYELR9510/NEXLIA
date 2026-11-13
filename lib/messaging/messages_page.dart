@@ -416,9 +416,7 @@ class _SmsPermissionCard extends StatelessWidget {
       icon: CupertinoIcons.lock_shield,
       color: smsColor,
       title: 'Ver tus SMS en NEXLIA',
-      text: (alreadyGranted
-              ? 'Android ya permite a NEXLIA leer SMS por ser tu app de Teléfono, pero no se mostrarán hasta que lo confirmes. '
-              : 'NEXLIA necesita permiso para leer los SMS del teléfono. ') +
+      text: '${alreadyGranted ? 'Android ya permite a NEXLIA leer SMS por ser tu app de Teléfono, pero no se mostrarán hasta que lo confirmes.' : 'NEXLIA necesita permiso para leer los SMS del teléfono.'} '
           'Solo se leen para mostrarlos aquí: no se copian a ningún servidor, no se analizan y NEXLIA no envía SMS por su cuenta.',
       action: CupertinoButton(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
