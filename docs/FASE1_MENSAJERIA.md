@@ -3,7 +3,12 @@
 **Rama:** `feature/fase-1-mensajeria` (desde `main` @ `6cca168`)\
 **Referencia:** `docs/ARQUITECTURA_NEXLIA.md` §4 (canales separados), §5 (modelo), §7 (seguridad), §8 (roles)
 
-Este documento define el diseño **antes** de implementar y se actualizó al cerrar la fase. Lo que está implementado y verificado se detalla en `docs/INFORME_FASE1.md`.
+Este documento define el diseño **antes** de implementar. Se actualizó al cerrar la fase y en la ronda de correcciones del PR #8 (accesibilidad, compatibilidad SMS y backend). Lo que está implementado y verificado se detalla en `docs/INFORME_FASE1.md`.
+
+Documentos relacionados:
+
+- `docs/CHAT_BACKEND.md`: arquitectura del servidor de NEXLIA Chat.
+- `docs/GOOGLE_PLAY_SMS.md`: permisos SMS y Google Play.
 
 ---
 
@@ -147,8 +152,21 @@ Errores (los traduce `HttpChatApi`):
 | `chat_message_receipts` | Recibos de entrega y lectura por miembro |
 | `chat_push_endpoints` | Tokens push por dispositivo |
 
-- **Reversible:** `down` borra solo las tablas `chat_*`, en orden inverso de claves foráneas. CI las aplica sobre MySQL 8: arriba, abajo y otra vez arriba.
-- **Fuera de alcance:** los endpoints PHP de Chat no se implementan en esta fase, porque sin autenticación no serían seguros (§1).
+`servidor/chat/migraciones/002_chat_identidad_y_abuso.up.sql` y `.down.sql` añaden:
+
+- **Identidad por teléfono verificado:** `chat_users.phone_e164`, único.
+- **Sesiones con token de renovación rotatorio:** en `chat_devices`, solo hashes y con familia de rotación.
+- **Retos OTP:** `chat_otp_challenges`, con el código como HMAC.
+- **Conversación directa única por par:** `direct_key`.
+- **Cursores de entrega y lectura por miembro.**
+- **Protección contra abuso:** `chat_rate_limits`, `chat_blocks` y `chat_reports`.
+- **Eventos de seguridad:** `chat_security_events`.
+
+Reglas:
+
+- **Reversible:** cada `down` deshace solo su migración. En CI (MySQL 8), tras bajar la 002 el esquema queda idéntico al de la 001 (se comparan los `SHOW CREATE TABLE`). Se prueban 8 restricciones y, al final, el esquema de spam queda intacto.
+- **Contrato:** `servidor/chat/openapi.yaml` (OpenAPI 3.0.3), validado en CI.
+- **Fuera de alcance:** los endpoints PHP de Chat no se implementan. Sin proveedor de OTP ni dominio con TLS no habría un backend real, y simularlo está excluido. El diseño completo está en `docs/CHAT_BACKEND.md`.
 
 ## 9. Permisos y roles Android
 
@@ -158,7 +176,9 @@ Errores (los traduce `HttpChatApi`):
 | Rol SMS predeterminado | **No se solicita.** Exige `SMS_DELIVER`, `WAP_PUSH_DELIVER`, `RESPOND_VIA_MESSAGE` y escribir cada SMS recibido; pedirlo sin implementarlo completo rompería la recepción de SMS y "Responder con mensaje" (auditoría P0, §5) |
 | `SEND_SMS`, `RECEIVE_SMS`, `RECEIVE_MMS` | No se añaden en esta fase |
 
-Política de Google Play: `READ_SMS` está restringido a apps de SMS predeterminadas. La distribución actual es por APK; antes de publicar en Play hay que completar el rol SMS o retirar la lectura.
+Política de Google Play: el gestor de Teléfono predeterminado **no** puede usar `READ_SMS`. La distribución actual es por APK. Antes de publicar en Play hay que completar el rol SMS o publicar una variante sin `READ_SMS`. Análisis completo en `docs/GOOGLE_PLAY_SMS.md`.
+
+**Disponibilidad de SMS:** se considera que el dispositivo tiene SMS si declara `FEATURE_TELEPHONY` o `FEATURE_TELEPHONY_MESSAGING`. Exigir solo la segunda (API 33+) dejaba sin SMS al emulador de Android 13 y 14, que no la declara; lo detectó la matriz de emuladores y está corregido.
 
 ## 10. Interfaz
 
@@ -169,4 +189,48 @@ Política de Google Play: `READ_SMS` está restringido a apps de SMS predetermin
 - **Más > Mensajes:** estado de cada canal (servidor, conexión, cifrado "No disponible todavía", permiso SMS) e interruptor de conversaciones de prueba.
 - **Más > Buzón de voz:** la misma pantalla que antes estaba en la pestaña 3.
 - **Estados vacíos** por filtro, permiso SMS denegado, Chat sin servidor y búsqueda sin resultados.
-- Tema claro y oscuro con los tokens existentes. Cada fila y cada mensaje tiene una etiqueta de accesibilidad con canal, estado, no leídos y SIM.
+- Tema claro y oscuro con los tokens existentes, más una paleta de mensajería con contraste AA (§11).
+
+## 11. Accesibilidad
+
+| Requisito | Implementación (`lib/messaging/a11y.dart`, `palette.dart`) | Verificación |
+|---|---|---|
+| Texto y acciones separados | `InfoBlock` (nodo de texto, nunca botón) y `ActionButton`/`Tappable` (nodo de botón con su etiqueta exacta). Antes la tarjeta de SMS completa se leía como un único botón | Pruebas de semántica y `uiautomator` en API 29 a 35 |
+| Etiquetas y estado | Filtros: botón, seleccionado, grupo excluyente y pista. Filas: nombre, canal, prueba, SIM, no leídos, pendientes, hora y fragmento. Mensajes: remitente, hora, texto y estado. Interruptores unidos a su texto (`MergeSemantics`) | Pruebas `accesibilidad_test.dart` y `uiautomator` |
+| Teclado | `FocusableActionDetector`: Tab para moverse, Intro o Espacio para activar, borde de foco visible | Pruebas con eventos de teclado |
+| Tamaño táctil | Mínimo 48 × 48 en filas, filtros, botones y buscador | `androidTapTargetGuideline` en la bandeja; `iOSTapTargetGuideline` (44) en las pantallas con la barra de Cupertino |
+| Contraste | Fondos sólidos que se oscurecen hasta 4,5:1 con texto blanco para cualquier acento (`solidFor`), tintas propias para etiquetas y tintes de aviso al 8 % | `paleta_test.dart`: 4 acentos × 2 temas. `textContrastGuideline` en la bandeja, la conversación y el hilo, en claro y oscuro |
+| Texto grande | El canal sale de la barra de navegación (no cabía al 200 %). El pie de las burbujas usa `Wrap` | Pantallas al 200 % sin desbordes, en claro y oscuro |
+
+## 12. Matriz de compatibilidad Android
+
+minSdk 29, targetSdk 36. Emuladores x86_64 `default` en CI, con una SIM simulada, NEXLIA como marcador predeterminado y 21 SMS de prueba.
+
+| Comportamiento | Android 10 (29) | 12 (31) | 13 (33) | 14 (34) | 15 (35) | 16 (36) |
+|---|---|---|---|---|---|---|
+| `READ_SMS` concedido por el rol de Teléfono (`GRANTED_BY_ROLE`) | Sí | Sí | Sí | Sí | Sí | No probado |
+| Sin consentimiento en la app no se lee nada | PASS | PASS | PASS | PASS | PASS | — |
+| Tarjeta: texto y botón como nodos separados | PASS | PASS | PASS | PASS | PASS | — |
+| SMS visibles tras confirmar | PASS | PASS | PASS | PASS | PASS | — |
+| Hilo SMS y botón Responder accesibles | PASS | PASS | PASS | PASS | PASS | — |
+| Permiso retirado (`pm revoke`): no se leen SMS y se explica | PASS | PASS | PASS | PASS | PASS | — |
+| `FEATURE_TELEPHONY_MESSAGING` declarada (*) | — (existe desde API 33) | — | No | No | Sí | — |
+| Sin cierres inesperados ni ANR | PASS | PASS | PASS | PASS | PASS | — |
+| Regresión: llamada entrante con la pantalla de NEXLIA | PASS | PASS | PASS | PASS | PASS | — |
+| Regresión: llamada saliente desde otra app | PASS | PASS | PASS | PASS | PASS | — |
+| Ajustes restringidos para APK instalado desde archivo (API 33+) | — | — | No verificable (CI instala con `adb`) | Igual | Igual | Igual |
+| Dos SIM, SIM retirada, fabricantes sin `sub_id` | No verificable en emulador (lógica cubierta por pruebas unitarias) | | | | | |
+
+(*) Deducido de la ejecución con la comprobación anterior, que solo aceptaba esta característica: en API 33 y 34 la app mostraba «SMS no disponibles» y en API 35 no. Que esa característica varíe así de una versión a otra es el motivo de la corrección.
+
+Resultados por versión y evidencias en `docs/INFORME_FASE1.md` §8.
+
+## 13. Limitaciones conocidas
+
+- **Solo SMS, solo lectura.** No hay MMS, envío desde NEXLIA ni rol SMS (§9).
+- **Hilos.** Se forman con los 3000 SMS más recientes (`SCAN_LIMIT`), y cada hilo muestra sus 300 más recientes. Un hilo cuyo último SMS es más antiguo que esos 3000 no aparece. Se eligió así frente a `content://mms-sms/conversations`, que se comporta distinto según el fabricante.
+- **SIM.** Android solo informa las SIM **activas**. Un SMS de una SIM retirada o desactivada, sin `sub_id` o de un teléfono sin `READ_PHONE_STATE` se muestra como «SIM no identificada» en teléfonos de dos ranuras. En teléfonos de una ranura no se muestra etiqueta. No se ha probado con dos SIM reales.
+- **Google Play.** Esta versión no es publicable en Play con `READ_SMS` (`docs/GOOGLE_PLAY_SMS.md`).
+- **NEXLIA Chat.** No hay servidor, cuentas, sincronización ni push (`docs/CHAT_BACKEND.md`). Tampoco hay cifrado de extremo a extremo.
+- **Lector de pantalla del buscador.** En `uiautomator` el campo no expone su etiqueta como texto o descripción (las pruebas de Flutter sí la ven). Falta comprobarlo con TalkBack en un teléfono.
+- **Android 16 (API 36)** no está en la matriz de emuladores.

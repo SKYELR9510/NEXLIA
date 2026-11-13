@@ -32,6 +32,8 @@ Future<void> _loadFonts() async {
   if (weights.isEmpty) throw StateError('No se encontró Roboto en $material');
   for (final family in [
     'Roboto',
+    // SemanticsDebugger dibuja sus etiquetas con esta familia.
+    'sans-serif',
     'CupertinoSystemText',
     'CupertinoSystemDisplay',
     '.SF Pro Text',
