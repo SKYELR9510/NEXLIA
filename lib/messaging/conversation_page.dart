@@ -329,8 +329,8 @@ class _SmsThreadPageState extends State<SmsThreadPage> {
                 future: messages,
                 builder: (context, snap) {
                   if (snap.connectionState != ConnectionState.done) {
-                    return const Center(
-                        child: Semantics(label: 'Cargando SMS', child: CupertinoActivityIndicator()));
+                    return Center(
+                        child: Semantics(label: 'Cargando SMS', child: const CupertinoActivityIndicator()));
                   }
                   if (snap.hasError) {
                     return Center(

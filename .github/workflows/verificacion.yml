@@ -120,31 +120,54 @@ jobs:
       - name: Esquema de spam existente (para comprobar que no se toca)
         run: mysql -h 127.0.0.1 -uroot nexlia_ci < servidor/schema.sql
 
-      - name: Subir, bajar y volver a subir
+      - name: Migraciones 001 y 002 (subir, bajar, volver a subir)
         run: |
           set -e
           q() { mysql -h 127.0.0.1 -uroot nexlia_ci -N -e "$1"; }
-          tablas() { q "SELECT table_name FROM information_schema.tables WHERE table_schema='nexlia_ci' ORDER BY table_name" | tr '\n' ' '; echo; }
-          d=servidor/chat/migraciones
-          mysql -h 127.0.0.1 -uroot nexlia_ci < $d/001_chat_base.up.sql
-          echo "Tras subir:  $(tablas)"
-          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'chat\_%'")" = 7
-          # Idempotencia: el mismo client_id del mismo remitente no se duplica.
-          q "INSERT INTO chat_users (public_id, display_name) VALUES ('01PRUEBA0000000000000000U1','Prueba')"
-          q "INSERT INTO chat_conversations (public_id) VALUES ('01PRUEBA0000000000000000C1')"
-          q "INSERT INTO chat_conversation_members VALUES (1, 1, DEFAULT)"
+          run() { echo "+ $1"; mysql -h 127.0.0.1 -uroot nexlia_ci < "servidor/chat/migraciones/$1"; }
+          n_chat() { q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'chat\_%'"; }
+          n_spam() { q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'spam\_%'"; }
+          snapshot() { for t in $(q "SELECT table_name FROM information_schema.tables WHERE table_schema='nexlia_ci' ORDER BY table_name"); do q "SHOW CREATE TABLE $t" | sed 's/ AUTO_INCREMENT=[0-9]*//'; done; }
+          expect() { [ "$2" = "$3" ] && echo "OK   | $1 ($2)" || { echo "::error::$1: esperado $3, obtenido $2"; exit 1; }; }
+          rejects() { if q "$2" 2>/dev/null; then echo "::error::$1 aceptado"; exit 1; else echo "OK   | $1 rechazado"; fi; }
+
+          run 001_chat_base.up.sql
+          expect "tablas chat_* tras 001" "$(n_chat)" 7
+          snapshot > tras_001.sql
+          run 002_chat_identidad_y_abuso.up.sql
+          expect "tablas chat_* tras 002" "$(n_chat)" 13
+          run 002_chat_identidad_y_abuso.down.sql
+          snapshot > tras_002_bajada.sql
+          diff -u tras_001.sql tras_002_bajada.sql && echo "OK   | bajar 002 deja el esquema idéntico al de 001"
+          run 002_chat_identidad_y_abuso.up.sql
+          expect "tablas chat_* tras volver a subir 002" "$(n_chat)" 13
+
+          # Restricciones (datos de prueba ficticios).
+          q "INSERT INTO chat_users (public_id, phone_e164, display_name) VALUES ('01PRUEBA00000000000000000A','+51900000001','Prueba A'), ('01PRUEBA00000000000000000B','+51900000002','Prueba B')"
+          rejects "mismo teléfono en dos cuentas" "INSERT INTO chat_users (public_id, phone_e164, display_name) VALUES ('01PRUEBA00000000000000000C','+51900000001','Duplicada')"
+          q "INSERT INTO chat_conversations (public_id, direct_key) VALUES ('01PRUEBA0000000000000000C1', UNHEX(SHA2('1:2',256)))"
+          rejects "segunda conversación directa del mismo par" "INSERT INTO chat_conversations (public_id, direct_key) VALUES ('01PRUEBA0000000000000000C2', UNHEX(SHA2('1:2',256)))"
+          q "INSERT INTO chat_conversation_members (conversation_id, user_id) VALUES (1,1),(1,2)"
           q "INSERT INTO chat_messages (public_id, conversation_id, sender_id, client_id, body) VALUES ('01PRUEBA0000000000000000M1',1,1,'c-1','hola')"
-          if q "INSERT INTO chat_messages (public_id, conversation_id, sender_id, client_id, body) VALUES ('01PRUEBA0000000000000000M2',1,1,'c-1','hola')" 2>/dev/null; then
-            echo "::error::client_id duplicado aceptado"; exit 1
-          fi
-          echo "Duplicado rechazado por uq_chat_messages_idem"
-          mysql -h 127.0.0.1 -uroot nexlia_ci < $d/001_chat_base.down.sql
-          echo "Tras bajar:  $(tablas)"
-          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'chat\_%'")" = 0
-          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'spam\_%'")" = 2
-          mysql -h 127.0.0.1 -uroot nexlia_ci < $d/001_chat_base.up.sql
-          echo "Tras volver a subir: $(tablas)"
-          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'chat\_%'")" = 7
+          rejects "client_id repetido del mismo remitente" "INSERT INTO chat_messages (public_id, conversation_id, sender_id, client_id, body) VALUES ('01PRUEBA0000000000000000M2',1,1,'c-1','hola')"
+          q "UPDATE chat_conversation_members SET last_read_message_id = 1 WHERE conversation_id = 1 AND user_id = 2"
+          q "INSERT INTO chat_blocks (blocker_id, blocked_id) VALUES (2,1)"
+          rejects "bloqueo duplicado" "INSERT INTO chat_blocks (blocker_id, blocked_id) VALUES (2,1)"
+          q "INSERT INTO chat_reports (reporter_id, reported_id, message_id, reason) VALUES (2,1,1,'spam')"
+          rejects "mismo reporte dos veces" "INSERT INTO chat_reports (reporter_id, reported_id, message_id, reason) VALUES (2,1,1,'spam')"
+          q "INSERT INTO chat_devices (user_id, token_hash, refresh_hash, refresh_family) VALUES (1, UNHEX(SHA2('a',256)), UNHEX(SHA2('r',256)), UNHEX(MD5('f')))"
+          rejects "token de renovación repetido" "INSERT INTO chat_devices (user_id, token_hash, refresh_hash) VALUES (1, UNHEX(SHA2('b',256)), UNHEX(SHA2('r',256)))"
+          q "INSERT INTO chat_otp_challenges (public_id, phone_e164, purpose, code_hash, ip_hash, expires_at) VALUES ('01PRUEBA0000000000000000O1','+51900000001','login', UNHEX(SHA2('x',256)), UNHEX(SHA2('ip',256)), NOW(3) + INTERVAL 5 MINUTE)"
+          q "INSERT INTO chat_rate_limits (bucket, window_start, hits) VALUES ('otp:phone:+51900000001', '2026-01-01 00:00:00', 1) ON DUPLICATE KEY UPDATE hits = hits + 1"
+          q "INSERT INTO chat_rate_limits (bucket, window_start, hits) VALUES ('otp:phone:+51900000001', '2026-01-01 00:00:00', 1) ON DUPLICATE KEY UPDATE hits = hits + 1"
+          expect "contador de frecuencia" "$(q "SELECT hits FROM chat_rate_limits")" 2
+          # Una cuenta con mensajes no se borra físicamente: la API usa deleted_at (borrado lógico).
+          rejects "borrado físico de una cuenta con mensajes" "DELETE FROM chat_users WHERE id = 1"
+
+          run 002_chat_identidad_y_abuso.down.sql
+          run 001_chat_base.down.sql
+          expect "tablas chat_* tras bajar todo" "$(n_chat)" 0
+          expect "tablas de spam intactas" "$(n_spam)" 2
 
   # Fase 1: capturas de la interfaz de mensajería (datos de prueba). Informativo.
   capturas:
