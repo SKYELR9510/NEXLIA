@@ -43,7 +43,7 @@ class CallService : InCallService() {
     override fun onCallAdded(call: Call) {
         val number = CallManager.numberOf(call)
         val key = SpamEngine.national(number)
-        val screened = System.currentTimeMillis() - (SpamEngine.screenedAt[key] ?: 0L) < 20000
+        val screened = SpamEngine.screened.wasScreened(key)
         if (call.state != Call.STATE_RINGING || screened) {
             show(call)
             return
