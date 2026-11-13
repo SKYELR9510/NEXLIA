@@ -9,7 +9,8 @@ import 'sim_choice.dart';
 /// Número que se está escribiendo en el teclado (compartido entre pantallas).
 final ValueNotifier<String> dialText = ValueNotifier<String>('');
 
-/// Pestaña activa: 0 Teléfono, 1 Contactos, 2 Recientes, 3 Buzón, 4 Más.
+/// Pestaña activa: 0 Teléfono, 1 Contactos, 2 Recientes, 3 Mensajes, 4 Más.
+/// (El Buzón de voz está en Más desde la Fase 1.)
 final ValueNotifier<int> homeTab = ValueNotifier<int>(0);
 
 /// Apariencia elegida por el usuario.

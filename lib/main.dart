@@ -7,6 +7,8 @@ import 'call_screen.dart';
 import 'common.dart';
 import 'contacts_page.dart';
 import 'keypad_page.dart';
+import 'messaging/messages_page.dart';
+import 'messaging/messaging.dart';
 import 'more_page.dart';
 import 'native.dart';
 import 'recents_page.dart';
@@ -137,7 +139,11 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) AppData.i.reload();
+    if (state == AppLifecycleState.resumed) {
+      AppData.i.reload();
+      // Solo relee si ya había permiso; nunca pide permisos al volver a la app.
+      if (Messaging.sms.loaded) Messaging.sms.load();
+    }
   }
 
   @override
@@ -191,12 +197,16 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   Expanded(
                     child: IndexedStack(
                       index: tab,
-                      children: const [
-                        KeypadPage(),
-                        ContactsPage(),
-                        RecentsPage(),
-                        VoicemailPage(),
-                        MorePage(),
+                      children: [
+                        const KeypadPage(),
+                        const ContactsPage(),
+                        const RecentsPage(),
+                        MessagesPage(
+                          chat: Messaging.chat,
+                          sms: Messaging.sms,
+                          nameFor: (a) => AppData.i.contactFor(a)?.name ?? a,
+                        ),
+                        const MorePage(),
                       ],
                     ),
                   ),
@@ -219,7 +229,7 @@ class _HomeState extends State<Home> with WidgetsBindingObserver {
                   _tabItem(0, CupertinoIcons.phone_fill, 'Teléfono'),
                   _tabItem(1, CupertinoIcons.person_fill, 'Contactos'),
                   _tabItem(2, CupertinoIcons.clock_fill, 'Recientes'),
-                  _tabItem(3, CupertinoIcons.recordingtape, 'Buzón'),
+                  _tabItem(3, CupertinoIcons.chat_bubble_2_fill, 'Mensajes'),
                   _tabItem(4, CupertinoIcons.line_horizontal_3, 'Más'),
                 ],
               ),

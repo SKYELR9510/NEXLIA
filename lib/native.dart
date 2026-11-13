@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'messaging/models.dart';
+
 class Contact {
   Contact(this.id, this.name, this.numbers, this.starred, this.hasPhoto);
   final String id;
@@ -224,6 +226,57 @@ class Native {
       return await _ch.invokeMethod<String>('getVersion') ?? '';
     } catch (_) {
       return '';
+    }
+  }
+
+  // ---- SMS (solo lectura; la mensajería los usa a través de SmsRepository) ----
+
+  static Future<SmsPermission> smsPermission() async {
+    try {
+      final s = await _ch.invokeMethod<String>('smsPermission');
+      return switch (s) {
+        'granted' => SmsPermission.granted,
+        'unavailable' => SmsPermission.unavailable,
+        _ => SmsPermission.denied,
+      };
+    } catch (_) {
+      return SmsPermission.unavailable;
+    }
+  }
+
+  static Future<bool> requestSmsPermission() => _bool('requestSmsPermission');
+
+  /// Convierte los errores del canal en [SmsReadException] para que la interfaz
+  /// distinga "sin SMS" de "no se pudieron leer".
+  static Future<List<dynamic>> _smsList(String method, [Map<String, dynamic>? args]) async {
+    try {
+      return await _ch.invokeMethod<List<dynamic>>(method, args) ?? const [];
+    } on PlatformException catch (e) {
+      throw SmsReadException(switch (e.code) {
+        'permission' => SmsReadErrorKind.permission,
+        'unavailable' => SmsReadErrorKind.unavailable,
+        _ => SmsReadErrorKind.provider,
+      }, e.message ?? '');
+    } on MissingPluginException {
+      throw const SmsReadException(SmsReadErrorKind.unavailable);
+    }
+  }
+
+  static Future<List<SmsThread>> getSmsThreads() async =>
+      (await _smsList('getSmsThreads')).whereType<Map>().map(SmsThread.fromMap).toList();
+
+  static Future<List<SmsMessage>> getSmsMessages(String threadId) async =>
+      (await _smsList('getSmsMessages', {'threadId': threadId}))
+          .whereType<Map>()
+          .map(SmsMessage.fromMap)
+          .toList();
+
+  /// SIM para etiquetar SMS. Si falla, se devuelve "sin información" (nunca bloquea los SMS).
+  static Future<SmsSimInfo> getSimSubscriptions() async {
+    try {
+      return SmsSimInfo.fromNative(await _ch.invokeMethod<Object?>('getSimSubscriptions'));
+    } catch (_) {
+      return const SmsSimInfo(readable: false);
     }
   }
 

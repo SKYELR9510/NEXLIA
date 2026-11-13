@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -44,11 +46,37 @@ jobs:
       - name: Análisis estático
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      - name: Análisis estático sin opciones (informativo)
+        run: |
+          set +e
+          flutter analyze > analyze.txt 2>&1; code=$?
+          tail -3 analyze.txt
+          echo "flutter analyze (sin opciones): código $code"
+          grep -cE "^ *error •" analyze.txt | sed 's/^/errores: /'
+          grep -cE "^ *warning •" analyze.txt | sed 's/^/advertencias: /'
+          grep -cE "^ *info •" analyze.txt | sed 's/^/avisos informativos: /'
+
+      - name: Espacios y finales de línea (git diff --check)
+        if: github.ref != 'refs/heads/main'
+        run: |
+          git fetch -q origin main
+          git diff --check origin/main...HEAD && echo "git diff --check: sin problemas"
+
       - name: Pruebas Dart
         run: flutter test
 
       - name: Compilar APK debug
         run: flutter build apk --debug
+
+      - name: Compilar APK release (sin publicar)
+        run: |
+          # Sin android/app/nexlia.keystore, build.gradle.kts firma la release con la clave
+          # de depuración: sirve para comprobar que compila (R8, recursos), no para distribuir.
+          flutter build apk --release
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          $BT/aapt2 dump badging build/app/outputs/flutter-apk/app-release.apk | grep -E "^package:|^minSdkVersion|^targetSdkVersion"
+          $BT/apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -iE "certificate (DN|SHA-256)"
+          $BT/aapt2 dump permissions build/app/outputs/flutter-apk/app-release.apk | sort
 
       - name: Pruebas Kotlin
         working-directory: android
@@ -70,3 +98,113 @@ jobs:
 
       - name: Sintaxis PHP
         run: for f in servidor/*.php; do php -l "$f"; done
+
+  # Fase 1: migraciones de NEXLIA Chat sobre MySQL 8 (arriba, abajo, arriba).
+  migraciones-chat:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: solo-ci
+          MYSQL_DATABASE: nexlia_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -psolo-ci"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      MYSQL_PWD: solo-ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Esquema de spam existente (para comprobar que no se toca)
+        run: mysql -h 127.0.0.1 -uroot nexlia_ci < servidor/schema.sql
+
+      - name: Migraciones 001 y 002 (subir, bajar, volver a subir)
+        run: |
+          set -e
+          q() { mysql -h 127.0.0.1 -uroot nexlia_ci -N -e "$1"; }
+          run() { echo "+ $1"; mysql -h 127.0.0.1 -uroot nexlia_ci < "servidor/chat/migraciones/$1"; }
+          n_chat() { q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'chat\_%'"; }
+          n_spam() { q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'spam\_%'"; }
+          snapshot() { for t in $(q "SELECT table_name FROM information_schema.tables WHERE table_schema='nexlia_ci' ORDER BY table_name"); do q "SHOW CREATE TABLE $t" | sed 's/ AUTO_INCREMENT=[0-9]*//'; done; }
+          expect() { [ "$2" = "$3" ] && echo "OK   | $1 ($2)" || { echo "::error::$1: esperado $3, obtenido $2"; exit 1; }; }
+          rejects() { if q "$2" 2>/dev/null; then echo "::error::$1 aceptado"; exit 1; else echo "OK   | $1 rechazado"; fi; }
+
+          run 001_chat_base.up.sql
+          expect "tablas chat_* tras 001" "$(n_chat)" 7
+          snapshot > tras_001.sql
+          run 002_chat_identidad_y_abuso.up.sql
+          expect "tablas chat_* tras 002" "$(n_chat)" 12
+          run 002_chat_identidad_y_abuso.down.sql
+          snapshot > tras_002_bajada.sql
+          diff -u tras_001.sql tras_002_bajada.sql && echo "OK   | bajar 002 deja el esquema idéntico al de 001"
+          run 002_chat_identidad_y_abuso.up.sql
+          expect "tablas chat_* tras volver a subir 002" "$(n_chat)" 12
+
+          # Restricciones (datos de prueba ficticios).
+          q "INSERT INTO chat_users (public_id, phone_e164, display_name) VALUES ('01PRUEBA00000000000000000A','+51900000001','Prueba A'), ('01PRUEBA00000000000000000B','+51900000002','Prueba B')"
+          rejects "mismo teléfono en dos cuentas" "INSERT INTO chat_users (public_id, phone_e164, display_name) VALUES ('01PRUEBA00000000000000000C','+51900000001','Duplicada')"
+          q "INSERT INTO chat_conversations (public_id, direct_key) VALUES ('01PRUEBA0000000000000000C1', UNHEX(SHA2('1:2',256)))"
+          rejects "segunda conversación directa del mismo par" "INSERT INTO chat_conversations (public_id, direct_key) VALUES ('01PRUEBA0000000000000000C2', UNHEX(SHA2('1:2',256)))"
+          q "INSERT INTO chat_conversation_members (conversation_id, user_id) VALUES (1,1),(1,2)"
+          q "INSERT INTO chat_messages (public_id, conversation_id, sender_id, client_id, body) VALUES ('01PRUEBA0000000000000000M1',1,1,'c-1','hola')"
+          rejects "client_id repetido del mismo remitente" "INSERT INTO chat_messages (public_id, conversation_id, sender_id, client_id, body) VALUES ('01PRUEBA0000000000000000M2',1,1,'c-1','hola')"
+          q "UPDATE chat_conversation_members SET last_read_message_id = 1 WHERE conversation_id = 1 AND user_id = 2"
+          q "INSERT INTO chat_blocks (blocker_id, blocked_id) VALUES (2,1)"
+          rejects "bloqueo duplicado" "INSERT INTO chat_blocks (blocker_id, blocked_id) VALUES (2,1)"
+          q "INSERT INTO chat_reports (reporter_id, reported_id, message_id, reason) VALUES (2,1,1,'spam')"
+          rejects "mismo reporte dos veces" "INSERT INTO chat_reports (reporter_id, reported_id, message_id, reason) VALUES (2,1,1,'spam')"
+          q "INSERT INTO chat_devices (user_id, token_hash, refresh_hash, refresh_family) VALUES (1, UNHEX(SHA2('a',256)), UNHEX(SHA2('r',256)), UNHEX(MD5('f')))"
+          rejects "token de renovación repetido" "INSERT INTO chat_devices (user_id, token_hash, refresh_hash) VALUES (1, UNHEX(SHA2('b',256)), UNHEX(SHA2('r',256)))"
+          q "INSERT INTO chat_otp_challenges (public_id, phone_e164, purpose, code_hash, ip_hash, expires_at) VALUES ('01PRUEBA0000000000000000O1','+51900000001','login', UNHEX(SHA2('x',256)), UNHEX(SHA2('ip',256)), NOW(3) + INTERVAL 5 MINUTE)"
+          q "INSERT INTO chat_rate_limits (bucket, window_start, hits) VALUES ('otp:phone:+51900000001', '2026-01-01 00:00:00', 1) ON DUPLICATE KEY UPDATE hits = hits + 1"
+          q "INSERT INTO chat_rate_limits (bucket, window_start, hits) VALUES ('otp:phone:+51900000001', '2026-01-01 00:00:00', 1) ON DUPLICATE KEY UPDATE hits = hits + 1"
+          expect "contador de frecuencia" "$(q "SELECT hits FROM chat_rate_limits")" 2
+          # Una cuenta con mensajes no se borra físicamente: la API usa deleted_at (borrado lógico).
+          rejects "borrado físico de una cuenta con mensajes" "DELETE FROM chat_users WHERE id = 1"
+
+          run 002_chat_identidad_y_abuso.down.sql
+          run 001_chat_base.down.sql
+          expect "tablas chat_* tras bajar todo" "$(n_chat)" 0
+          expect "tablas de spam intactas" "$(n_spam)" 2
+
+      - name: Contrato OpenAPI de NEXLIA Chat
+        run: |
+          python3 -m pip install --quiet "openapi-spec-validator==0.7.1"
+          python3 -m openapi_spec_validator servidor/chat/openapi.yaml
+          python3 - <<'PY'
+          import yaml
+          d = yaml.safe_load(open('servidor/chat/openapi.yaml'))
+          ops = [(m.upper(), p) for p, v in d['paths'].items() for m in v if m in ('get','post','put','patch','delete')]
+          print(f"{len(d['paths'])} rutas, {len(ops)} operaciones")
+          for m, p in ops: print(f"  {m:6} {p}")
+          PY
+
+  # Fase 1: capturas de la interfaz de mensajería (datos de prueba). Informativo.
+  capturas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+      - run: flutter pub get --enforce-lockfile
+      - name: Generar capturas
+        run: |
+          mkdir -p capturas
+          export FLUTTER_ROOT="$(dirname "$(dirname "$(command -v flutter)")")"
+          CAPTURAS_DIR="$PWD/capturas" flutter test test/capturas/capturas_test.dart
+          ls -la capturas
+          sha256sum capturas/*.png
+      - name: Capturas en el registro (base64)
+        run: |
+          tar -C capturas -czf capturas.tgz .
+          echo "BEGIN_CAPTURAS"; base64 -w 76 capturas.tgz; echo "END_CAPTURAS"
+          sha256sum capturas.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capturas-mensajeria
+          path: capturas/*.png
+          retention-days: 14
