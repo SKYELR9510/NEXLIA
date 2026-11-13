@@ -4,6 +4,7 @@ import 'package:flutter/cupertino.dart';
 
 import 'common.dart';
 import 'native.dart';
+import 'sim_choice.dart';
 import 'spam_page.dart';
 
 void _push(BuildContext context, Widget page) {
@@ -32,6 +33,8 @@ class MorePage extends StatelessWidget {
             () => _push(context, const AppearancePage())),
         _row(context, CupertinoIcons.photo_fill, const Color(0xFF0A84FF), 'Pantalla de llamada',
             'Fondo propio y video al recibir llamadas', () => _push(context, const CallStylePage())),
+        _row(context, CupertinoIcons.antenna_radiowaves_left_right, const Color(0xFF00B8D9),
+            'SIM para llamar', _simSubtitle(), () => _push(context, const SimSettingsPage())),
         _row(context, CupertinoIcons.shield_lefthalf_fill, const Color(0xFF5E5CE6),
             'Bloqueo de llamadas', 'Spam, desconocidos y números bloqueados',
             () => _push(context, const SpamPage())),
@@ -64,6 +67,12 @@ class MorePage extends StatelessWidget {
         }),
       ],
     );
+  }
+
+  String _simSubtitle() {
+    final sims = AppData.i.sims;
+    if (sims.length < 2) return 'Una sola SIM';
+    return 'Elige SIM 1, SIM 2 o preguntar siempre';
   }
 
   Widget _row(BuildContext context, IconData icon, Color color, String title, String subtitle,

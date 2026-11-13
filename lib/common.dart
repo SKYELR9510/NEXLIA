@@ -4,6 +4,7 @@ import 'dart:ui';
 import 'package:flutter/cupertino.dart';
 
 import 'native.dart';
+import 'sim_choice.dart';
 
 /// Número que se está escribiendo en el teclado (compartido entre pantallas).
 final ValueNotifier<String> dialText = ValueNotifier<String>('');
@@ -466,9 +467,50 @@ Future<List<String>?> askText(BuildContext context, String title,
   return ctrls.map((c) => c.text.trim()).toList();
 }
 
+/// Punto único para iniciar llamadas desde NEXLIA.
+/// Con dos o más SIM, elige la cuenta ANTES de placeCall (selector previo o SIM
+/// guardada), aunque Android tenga una SIM predeterminada. Con una SIM, igual que antes.
 Future<void> callNumber(BuildContext context, String number) async {
-  if (number.trim().isEmpty) return;
-  final ok = await Native.placeCall(number.trim());
+  number = number.trim();
+  if (number.isEmpty) return;
+
+  var sims = await Native.getSimAccounts();
+  AppData.i.sims = sims;
+  final pref = await SimPreference.get();
+  final decision = decideSim(sims, pref);
+
+  var account = '';
+  if (decision.kind == SimDecisionKind.useSaved) {
+    account = decision.account;
+  } else if (decision.kind == SimDecisionKind.ask) {
+    // La SIM guardada ya no existe: se olvida para no volver a intentarla.
+    if (decision.staleSaved) await SimPreference.set(simAsk);
+    if (!context.mounted) return;
+    final pick = await showSimPicker(context, sims, number: number, stale: decision.staleSaved);
+    if (pick == null) return;
+    account = pick.key;
+    if (pick.remember) await SimPreference.set(pick.key);
+  }
+
+  var status = await Native.placeCall(number, account: account);
+
+  if (status == 'sim_unavailable') {
+    // La SIM desapareció entre la elección y la llamada: se vuelve a preguntar una vez.
+    if (account == await SimPreference.get()) await SimPreference.set(simAsk);
+    sims = await Native.getSimAccounts();
+    AppData.i.sims = sims;
+    if (sims.length < 2) {
+      status = await Native.placeCall(number);
+    } else {
+      if (!context.mounted) return;
+      final pick = await showSimPicker(context, sims, number: number, stale: true);
+      if (pick == null) return;
+      if (pick.remember) await SimPreference.set(pick.key);
+      status = await Native.placeCall(number, account: pick.key);
+    }
+  }
+
+  final ok = status == 'ok';
   if (!ok && context.mounted) {
     await showMessage(context, 'No se pudo llamar',
         'Revisa que la app tenga permiso de Teléfono y que sea la app de llamadas predeterminada.');

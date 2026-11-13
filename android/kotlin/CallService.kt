@@ -43,7 +43,7 @@ class CallService : InCallService() {
     override fun onCallAdded(call: Call) {
         val number = CallManager.numberOf(call)
         val key = SpamEngine.national(number)
-        val screened = System.currentTimeMillis() - (SpamEngine.screenedAt[key] ?: 0L) < 20000
+        val screened = SpamEngine.screened.wasScreened(key)
         if (call.state != Call.STATE_RINGING || screened) {
             show(call)
             return
@@ -124,7 +124,13 @@ class CallService : InCallService() {
             b.addAction(Notification.Action.Builder(null, "Rechazar", action("hangup", 1)).build())
             b.addAction(Notification.Action.Builder(null, "Contestar", action("answer", 2)).build())
         } else {
-            b.setContentText(if (state == "dialing") "Llamando…" else "Llamada en curso")
+            b.setContentText(
+                when (state) {
+                    "dialing" -> "Llamando…"
+                    "selectAccount" -> "Elige una SIM para llamar"
+                    else -> "Llamada en curso"
+                }
+            )
             b.addAction(Notification.Action.Builder(null, "Colgar", action("hangup", 1)).build())
         }
         nm.notify(notifId, b.build())

@@ -1,0 +1,72 @@
+# Verificación sin publicar.
+# - En ramas distintas de main y en Pull Requests hacia main.
+# - También la invoca apk.yml antes de publicar (workflow_call): si falla, no se publica.
+name: Verificación
+
+on:
+  push:
+    branches-ignore: [main]
+  pull_request:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+
+      - name: Versiones del entorno
+        run: |
+          flutter --version
+          java -version
+          php --version
+
+      - name: Dependencias (exactamente las de pubspec.lock)
+        run: flutter pub get --enforce-lockfile
+
+      - name: Formato (informativo)
+        run: dart format --output=none --set-exit-if-changed lib test || echo "::warning::Hay archivos sin formato estándar"
+
+      - name: Análisis estático
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Pruebas Dart
+        run: flutter test
+
+      - name: Compilar APK debug
+        run: flutter build apk --debug
+
+      - name: Pruebas Kotlin
+        working-directory: android
+        run: ./gradlew :app:testDebugUnitTest --console=plain
+
+      - name: Resumen de pruebas Kotlin
+        if: always()
+        run: |
+          for f in build/app/test-results/testDebugUnitTest/TEST-*.xml; do
+            grep -oE '<testsuite name="[^"]+" tests="[0-9]+" skipped="[0-9]+" failures="[0-9]+" errors="[0-9]+"' "$f"
+          done
+
+      - name: Permisos del manifiesto final (incluye los de plugins)
+        run: |
+          f=$(find build/app/intermediates -name AndroidManifest.xml -path "*merged_manifest*" | head -1)
+          echo "$f"
+          grep -oE 'uses-permission[^>]*android:name="[^"]+"' "$f" | sort -u
+          grep -oE 'android:(minSdkVersion|targetSdkVersion)="[0-9]+"' "$f" | sort -u
+
+      - name: Sintaxis PHP
+        run: for f in servidor/*.php; do php -l "$f"; done

@@ -26,7 +26,8 @@ import java.util.concurrent.Executors
 
 class MainActivity : FlutterActivity() {
     private var sink: EventChannel.EventSink? = null
-    private var pending: MethodChannel.Result? = null
+    /** Respuestas que esperan un diálogo del sistema, una lista por código de solicitud. */
+    private val pending = PendingRequests<MethodChannel.Result>()
     private var dialNumber: String? = null
     private val io = Executors.newSingleThreadExecutor()
 
@@ -68,6 +69,10 @@ class MainActivity : FlutterActivity() {
 
     override fun onDestroy() {
         CallManager.listener = null
+        // Ningún Future de Dart debe quedar esperando una pantalla que ya no existe.
+        for (r in pending.takeAll()) {
+            try { r.error("cancelled", "La pantalla se cerró antes de responder", null) } catch (e: Exception) { }
+        }
         super.onDestroy()
     }
 
@@ -114,8 +119,10 @@ class MainActivity : FlutterActivity() {
             "requestDefaultDialer" -> {
                 val rm = getSystemService(RoleManager::class.java)
                 if (rm.isRoleAvailable(RoleManager.ROLE_DIALER) && !rm.isRoleHeld(RoleManager.ROLE_DIALER)) {
-                    pending = result
-                    startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_DIALER), REQ_ROLE)
+                    // Si ya hay un diálogo abierto, esta respuesta espera el mismo resultado.
+                    if (pending.add(REQ_ROLE, result)) {
+                        startActivityForResult(rm.createRequestRoleIntent(RoleManager.ROLE_DIALER), REQ_ROLE)
+                    }
                 } else result.success(isDefaultDialer())
             }
             "requestPermissions" -> {
@@ -127,8 +134,7 @@ class MainActivity : FlutterActivity() {
                 if (Build.VERSION.SDK_INT >= 33) list.add(Manifest.permission.POST_NOTIFICATIONS)
                 val missing = list.filter { !has(it) }
                 if (missing.isEmpty()) result.success(true)
-                else {
-                    pending = result
+                else if (pending.add(REQ_PERMS, result)) {
                     requestPermissions(missing.toTypedArray(), REQ_PERMS)
                 }
             }
@@ -141,9 +147,23 @@ class MainActivity : FlutterActivity() {
             }
             "placeCall" -> {
                 val number = call.argument<String>("number") ?: ""
+                val account = call.argument<String>("account").orEmpty()
                 if (number.isEmpty() || !has(Manifest.permission.CALL_PHONE)) result.success(false)
                 else {
-                    getSystemService(TelecomManager::class.java).placeCall(Uri.fromParts("tel", number, null), Bundle())
+                    val extras = Bundle()
+                    if (account.isNotEmpty()) {
+                        // SIM elegida en NEXLIA antes de llamar. Si ya no existe (retirada o
+                        // desactivada), no se usa una cuenta inválida: Flutter vuelve a preguntar.
+                        val handle = SimAccounts.handleFor(this, account)
+                        if (handle == null) {
+                            result.error("sim_unavailable", "La SIM elegida ya no está disponible", null)
+                            return
+                        }
+                        extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
+                        CallManager.preselect(handle)
+                    }
+                    // Sin "account" (una sola SIM): Bundle vacío, exactamente como antes.
+                    getSystemService(TelecomManager::class.java).placeCall(Uri.fromParts("tel", number, null), extras)
                     result.success(true)
                 }
             }
@@ -193,6 +213,8 @@ class MainActivity : FlutterActivity() {
                     startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://wa.me/$d"))); true
                 } catch (e: Exception) { false })
             }
+            "selectPhoneAccount" -> result.success(CallManager.selectAccount(call.argument<String>("key") ?: ""))
+            "getSimAccounts" -> result.success(SimAccounts.list(this).map { it.toMap() })
             "swapCalls" -> { CallManager.swap(); result.success(true) }
             "mergeCalls" -> { CallManager.merge(); result.success(true) }
             "setBluetooth" -> { CallManager.setBluetooth(call.argument<Boolean>("on") == true); result.success(true) }
@@ -231,8 +253,13 @@ class MainActivity : FlutterActivity() {
                 result.success(true)
             }
             "pickMedia" -> {
+                // No se pueden abrir dos selectores a la vez.
+                if (pending.isPending(REQ_PICK)) {
+                    result.error("busy", "Ya hay un selector abierto", null)
+                    return
+                }
                 pickKind = call.argument<String>("kind") ?: "image"
-                pending = result
+                pending.add(REQ_PICK, result)
                 val i = Intent(Intent.ACTION_GET_CONTENT)
                     .setType(when (pickKind) { "video" -> "video/*"; "audio" -> "audio/*"; else -> "image/*" })
                     .addCategory(Intent.CATEGORY_OPENABLE)
@@ -335,7 +362,8 @@ class MainActivity : FlutterActivity() {
             .appendQueryParameter(CallLog.Calls.LIMIT_PARAM_KEY, "300").build()
         val cols = arrayOf(
             CallLog.Calls._ID, CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME,
-            CallLog.Calls.TYPE, CallLog.Calls.DATE, CallLog.Calls.DURATION
+            CallLog.Calls.TYPE, CallLog.Calls.DATE, CallLog.Calls.DURATION,
+            CallLog.Calls.PHONE_ACCOUNT_COMPONENT_NAME, CallLog.Calls.PHONE_ACCOUNT_ID
         )
         contentResolver.query(uri, cols, null, null, CallLog.Calls.DATE + " DESC")?.use { c ->
             while (c.moveToNext()) {
@@ -345,7 +373,8 @@ class MainActivity : FlutterActivity() {
                     "name" to (c.getString(2) ?: ""),
                     "callType" to c.getInt(3),
                     "date" to c.getLong(4),
-                    "duration" to c.getLong(5)
+                    "duration" to c.getLong(5),
+                    "account" to SimAccounts.key(c.getString(6), c.getString(7))
                 ))
             }
         }
@@ -372,33 +401,36 @@ class MainActivity : FlutterActivity() {
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode == REQ_PICK) {
-            val res = pending
-            pending = null
+            val waiting = pending.take(REQ_PICK)
+            if (waiting.isEmpty()) return
             val uri = data?.data
-            if (res == null) return
-            if (resultCode != RESULT_OK || uri == null) { res.success(null); return }
+            if (resultCode != RESULT_OK || uri == null) {
+                waiting.forEach { it.success(null) }
+                return
+            }
             val kind = pickKind
             io.execute {
                 try {
                     val path = importMedia(kind, uri)
-                    runOnUiThread { res.success(path) }
+                    runOnUiThread { waiting.forEach { it.success(path) } }
                 } catch (e: Exception) {
-                    runOnUiThread { res.error("error", e.message, null) }
+                    runOnUiThread { waiting.forEach { it.error("error", e.message, null) } }
                 }
             }
             return
         }
         if (requestCode == REQ_ROLE) {
-            pending?.success(isDefaultDialer())
-            pending = null
+            val ok = isDefaultDialer()
+            pending.take(REQ_ROLE).forEach { it.success(ok) }
         }
     }
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQ_PERMS) {
-            pending?.success(grantResults.all { it == PackageManager.PERMISSION_GRANTED })
-            pending = null
+            // Un resultado vacío significa que el diálogo se interrumpió: no es "todo concedido".
+            val ok = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+            pending.take(REQ_PERMS).forEach { it.success(ok) }
         }
     }
 }

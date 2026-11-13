@@ -1,64 +1,29 @@
-# Crea el proyecto Flutter y copia el codigo del marcador encima.
-# Uso: clic derecho > "Ejecutar con PowerShell", o doble clic en instalar.bat
-param([string]$Destino = "C:\proyectos\nexlia")
+# Prepara NEXLIA para compilar en Windows.
+# El repositorio ya es un proyecto Flutter completo: no se genera nada.
+# Uso: doble clic en instalar.bat (o clic derecho > "Ejecutar con PowerShell").
 
 $ErrorActionPreference = "Stop"
-$origen = $PSScriptRoot
+$version = "3.50.0"
+Set-Location $PSScriptRoot
 
 if (-not (Get-Command flutter -ErrorAction SilentlyContinue)) {
-    Write-Host "No se encontro Flutter en el PATH." -ForegroundColor Red
+    Write-Host "No se encontro Flutter en el PATH. Instala Flutter $version." -ForegroundColor Red
     exit 1
 }
 
-New-Item -ItemType Directory -Force -Path $Destino | Out-Null
-Set-Location $Destino
+$actual = (flutter --version --machine | ConvertFrom-Json).frameworkVersion
+if ($actual -ne $version) {
+    Write-Host "Aviso: tienes Flutter $actual; el proyecto esta fijado en $version." -ForegroundColor Yellow
+    Write-Host "Puedes cambiar con:  flutter downgrade $version   o   git -C (flutter sdk path) checkout $version"
+}
 
-Write-Host "1/4 Creando proyecto Flutter en $Destino ..."
-flutter create --org com.nexlia --project-name phone --platforms android .
+Write-Host "Descargando dependencias exactas (pubspec.lock) ..."
+flutter pub get --enforce-lockfile
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
-Write-Host "2/4 Copiando el codigo ..."
-Copy-Item "$origen\lib\*" "$Destino\lib" -Recurse -Force
-Copy-Item "$origen\android\AndroidManifest.xml" "$Destino\android\app\src\main\AndroidManifest.xml" -Force
-$kt = "$Destino\android\app\src\main\kotlin\com\nexlia\phone"
-New-Item -ItemType Directory -Force -Path $kt | Out-Null
-Copy-Item "$origen\android\kotlin\*.kt" $kt -Force
-Copy-Item "$origen\android\res\*" "$Destino\android\app\src\main\res" -Recurse -Force
-New-Item -ItemType Directory -Force -Path "$Destino\assets" | Out-Null
-Copy-Item "$origen\assets\*" "$Destino\assets" -Force
-$pub = Get-Content "$Destino\pubspec.yaml" -Raw
-if ($pub -notmatch "assets/icon.png") {
-    $pub = $pub -replace "(?m)^  uses-material-design: true", "  uses-material-design: true`n  assets:`n    - assets/icon.png"
-    [System.IO.File]::WriteAllText("$Destino\pubspec.yaml", $pub)
-}
-if (Test-Path "$Destino\test\widget_test.dart") { Remove-Item "$Destino\test\widget_test.dart" }
-
-Write-Host "3/4 Ajustando Android minimo (Android 10) ..."
-foreach ($g in @("$Destino\android\app\build.gradle.kts", "$Destino\android\app\build.gradle")) {
-    if (Test-Path $g) {
-        $t = Get-Content $g -Raw
-        $t = $t -replace "flutter\.minSdkVersion", "29"
-        [System.IO.File]::WriteAllText($g, $t)
-    }
-}
-
-$root = "$Destino\android\build.gradle.kts"
-if ((Test-Path $root) -and -not ((Get-Content $root -Raw) -match "lintVital")) {
-    Add-Content $root @"
-
-subprojects {
-    tasks.configureEach {
-        if (name.startsWith("lintVital")) { enabled = false }
-    }
-}
-"@
-}
-
-Write-Host "4/4 Descargando dependencias ..."
-flutter pub add video_player
-flutter pub get
-
 Write-Host ""
-Write-Host "Listo. Conecta el telefono por USB y ejecuta:" -ForegroundColor Green
-Write-Host "   cd $Destino"
+Write-Host "Listo. Con el telefono conectado por USB:" -ForegroundColor Green
 Write-Host "   flutter run --release"
+Write-Host ""
+Write-Host "Nota: un APK compilado en la PC se firma con tu clave debug local." -ForegroundColor Yellow
+Write-Host "No se instala encima de las versiones publicadas en GitHub (hay que desinstalar antes)."

@@ -185,6 +185,8 @@ class _RecentsPageState extends State<RecentsPage> {
                                     ? e.name
                                     : (e.number.isEmpty ? 'Número oculto' : e.number));
                             final extra = e.duration > 0 ? ' · ${formatDuration(e.duration)}' : '';
+                            final sim = AppData.i.simLabel(e.account);
+                            final simPrefix = sim.isEmpty ? '' : '$sim · ';
                             return GestureDetector(
                               behavior: HitTestBehavior.opaque,
                               onTap: () => openDetail(context, contact: contact, number: e.number),
@@ -231,7 +233,7 @@ class _RecentsPageState extends State<RecentsPage> {
                                               const SizedBox(width: 6),
                                               Flexible(
                                                 child: Text(
-                                                    '${callKind(e)} · ${formatTime(e.date)}$extra',
+                                                    '$simPrefix${callKind(e)} · ${formatTime(e.date)}$extra',
                                                     maxLines: 1,
                                                     overflow: TextOverflow.ellipsis,
                                                     style: TextStyle(
