@@ -32,8 +32,9 @@ Future<void> _loadFonts() async {
   if (weights.isEmpty) throw StateError('No se encontró Roboto en $material');
   for (final family in [
     'Roboto',
-    // SemanticsDebugger dibuja sus etiquetas con esta familia.
+    // Texto sin familia (p. ej. las etiquetas del SemanticsDebugger): en pruebas usa 'FlutterTest'.
     'sans-serif',
+    'FlutterTest',
     'CupertinoSystemText',
     'CupertinoSystemDisplay',
     '.SF Pro Text',
