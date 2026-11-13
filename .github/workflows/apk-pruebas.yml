@@ -1,0 +1,118 @@
+# APK para pruebas físicas: PR #3, #4, #5 y #6 integrados.
+# Solo corre en la rama temporal tmp/integracion-p0-sim. NO crea Release:
+# el APK queda como artefacto de esta ejecución.
+name: APK de pruebas P0 + SIM previa (no publica)
+
+on:
+  push:
+    branches: [tmp/integracion-p0-sim]
+
+permissions:
+  contents: read
+
+jobs:
+  # Análisis, pruebas Dart y Kotlin, build debug y php -l. Si falla, no hay APK.
+  verificar:
+    uses: ./.github/workflows/verificacion.yml
+
+  apk:
+    needs: verificar
+    runs-on: ubuntu-latest
+    env:
+      KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
+      KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+
+      - name: Compilar release con la clave de producción
+        run: |
+          if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASS" ]; then
+            echo "Faltan los secretos de firma"; exit 1
+          fi
+          echo "$KEYSTORE_B64" | base64 -d > android/app/nexlia.keystore
+          flutter pub get --enforce-lockfile
+          # versionCode 13 = igual que la release v1.0.13: se instala encima de ella (y del
+          # APK de pruebas anterior), y la próxima versión oficial (14+) se instala encima de esta.
+          flutter build apk --release --build-name=1.0.13-pruebas-p0-sim --build-number=13
+          rm -f android/app/nexlia.keystore
+          mkdir out
+          cp build/app/outputs/flutter-apk/app-release.apk out/NEXLIA-pruebas-P0-SIM.apk
+
+      - name: Verificar firma, paquete, versión y SHA-256
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          cd out
+          gh release download v1.0.13 -R ${{ github.repository }} -p NEXLIA.apk -O ../v13.apk
+          $BT/apksigner verify --verbose --print-certs NEXLIA-pruebas-P0-SIM.apk | tee firma.txt
+          nuevo=$(grep "certificate SHA-256 digest" firma.txt | head -1 | sed 's/.*digest: //')
+          prod=$($BT/apksigner verify --print-certs ../v13.apk | grep "certificate SHA-256 digest" | head -1 | sed 's/.*digest: //')
+          echo "Certificado APK de pruebas: $nuevo"
+          echo "Certificado v1.0.13:        $prod"
+          [ "$nuevo" = "$prod" ] && [ "$nuevo" = "e0735399159692c453a3ffbdd4c695a9bafc289cc1f19c89743cb298942d6394" ] \
+            && echo "FIRMA: misma clave de producción que v1.0.13" || { echo "FIRMA DISTINTA"; exit 1; }
+          $BT/aapt2 dump badging NEXLIA-pruebas-P0-SIM.apk | grep -E "^package:|^minSdkVersion|^sdkVersion|^targetSdkVersion" | tee version.txt
+          $BT/aapt2 dump badging ../v13.apk | grep -E "^package:" | sed 's/^/v1.0.13 → /' | tee -a version.txt
+          grep -q "name='com.nexlia.phone' versionCode='13'" version.txt && echo "PAQUETE Y VERSIONCODE OK"
+          sha256sum NEXLIA-pruebas-P0-SIM.apk | tee NEXLIA-pruebas-P0-SIM.apk.sha256
+          {
+            echo "commit: $GITHUB_SHA"
+            echo "PR #3 chore/build-reproducible: 8190b2c"
+            echo "PR #4 fix/seleccion-sim: 3c3eda8"
+            echo "PR #5 fix/resultados-nativos: dbbd10f"
+            echo "PR #6 fix/selector-sim-previo: 9fd0b12"
+          } >> version.txt
+          ls -la
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NEXLIA-pruebas-P0-SIM
+          path: out/
+          retention-days: 14
+          if-no-files-found: error
+
+  # Instalación real: v1.0.13 publicada y, encima, este APK (Android 10, API 29).
+  instalacion:
+    needs: apk
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: NEXLIA-pruebas-P0-SIM
+          path: apk
+
+      - name: Release v1.0.13 y comprobar SHA-256 del artefacto descargado
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download v1.0.13 -R ${{ github.repository }} -p NEXLIA.apk -O v13.apk
+          cd apk && sha256sum -c NEXLIA-pruebas-P0-SIM.apk.sha256
+
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Instalar como actualización en emulador Android 10
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 29
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash ci/prueba_instalacion.sh apk/NEXLIA-pruebas-P0-SIM.apk
