@@ -87,11 +87,19 @@ object SmsReader {
         "subId" to r.subId,
     )
 
-    /** El dispositivo tiene mensajería SMS (las tablets sin telefonía no). */
+    /**
+     * ¿Hay SMS en el dispositivo? Basta con cualquiera de las dos características:
+     * FEATURE_TELEPHONY_MESSAGING (API 33+) no la declaran todos los dispositivos con SMS
+     * (el emulador de Android 13 y 14 no la declara y sí recibe SMS), así que exigirla
+     * dejaba sin SMS a teléfonos válidos. Si de verdad no hay proveedor, la consulta
+     * devuelve un cursor nulo y se informa "unavailable".
+     */
+    fun smsAvailable(hasTelephony: Boolean, hasMessaging: Boolean): Boolean = hasTelephony || hasMessaging
+
     fun hasSmsFeature(ctx: Context): Boolean {
         val pm = ctx.packageManager
-        return if (Build.VERSION.SDK_INT >= 33) pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_MESSAGING)
-        else pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+        val messaging = Build.VERSION.SDK_INT >= 33 && pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_MESSAGING)
+        return smsAvailable(pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY), messaging)
     }
 
     private val baseColumns = arrayOf(

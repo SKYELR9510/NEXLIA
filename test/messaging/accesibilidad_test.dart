@@ -251,11 +251,20 @@ void main() {
         await t.pumpWidget(app(MessagesPage(chat: chat, sms: sms), b: b, scale: 2));
         await t.pumpAndSettle();
         expect(t.takeException(), isNull);
-        // Con texto al 200 % la tarjeta queda más abajo: se desplaza hasta ella.
-        await t.scrollUntilVisible(find.text('Mostrar mis SMS aquí'), 200, scrollable: find.byType(Scrollable).first);
-        expect(t.takeException(), isNull);
-        await t.scrollUntilVisible(find.text('Ana (prueba)'), 300, scrollable: find.byType(Scrollable).first);
-        expect(t.takeException(), isNull);
+        // Con texto al 200 % la tarjeta y las filas quedan más abajo: se desplaza la lista
+        // y se comprueba en cada paso que nada se desborda.
+        Future<bool> scrollTo(Finder f) async {
+          for (var i = 0; i < 15; i++) {
+            if (f.evaluate().isNotEmpty) return true;
+            await t.drag(find.byType(ListView).first, const Offset(0, -300));
+            await t.pumpAndSettle();
+            expect(t.takeException(), isNull);
+          }
+          return f.evaluate().isNotEmpty;
+        }
+
+        expect(await scrollTo(find.text('Mostrar mis SMS aquí')), isTrue);
+        expect(await scrollTo(find.text('Ana (prueba)')), isTrue);
 
         await t.pumpWidget(app(ChatConversationPage(chat: chat, conversationId: 'demo-equipo'), b: b, scale: 2));
         await t.pumpAndSettle();

@@ -81,6 +81,14 @@ class SmsReaderTest {
     }
 
     @Test
+    fun smsDisponibleConCualquieraDeLasDosCaracteristicas() {
+        // Emulador de Android 13/14: telefonía sí, FEATURE_TELEPHONY_MESSAGING no (visto en CI).
+        assertTrue(SmsReader.smsAvailable(hasTelephony = true, hasMessaging = false))
+        assertTrue(SmsReader.smsAvailable(hasTelephony = false, hasMessaging = true))
+        assertEquals(false, SmsReader.smsAvailable(hasTelephony = false, hasMessaging = false))
+    }
+
+    @Test
     fun erroresSeClasificanParaDart() {
         assertEquals("permission", SmsReader.classify(SecurityException("x")))
         assertEquals("permission", SmsReader.classify(SmsReader.ReadError("permission", "x")))
