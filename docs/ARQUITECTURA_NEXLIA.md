@@ -1,9 +1,9 @@
 # NEXLIA — Arquitectura maestra y hoja de ruta
 
-**Estado:** documento de arquitectura objetivo  
-**Producto:** plataforma personal de comunicación para Android  
-**Repositorio:** `SKYELR9510/NEXLIA`  
-**Rama de trabajo:** `docs/arquitectura-plataforma`  
+**Estado:** documento de arquitectura objetivo\
+**Producto:** plataforma personal de comunicación para Android\
+**Repositorio:** `SKYELR9510/NEXLIA`\
+**Rama de trabajo:** `docs/arquitectura-plataforma`\
 **Idioma del producto:** español inicialmente; preparado para internacionalización
 
 > Este documento define el destino del producto y las reglas de integración. No autoriza reescrituras ni presupone que una función está implementada. Antes de modificar código, Claude debe inspeccionar la versión actual de cada archivo, verificar dependencias y registrar la situación real.
