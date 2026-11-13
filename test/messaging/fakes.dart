@@ -50,11 +50,21 @@ class FakeSmsSource implements SmsSource {
   SmsPermission perm;
   bool grantOnRequest;
   int reads = 0;
+
+  /// Lecturas de hilos en curso a la vez (debe ser como máximo 1).
+  int active = 0;
+  int maxActive = 0;
   int requests = 0;
   final List<String> composed = [];
   List<SmsThread> data = [];
   Map<String, List<SmsMessage>> msgs = {};
-  List<SimSubscription> sims = [];
+  SmsSimInfo simInfo = SmsSimInfo.none;
+
+  /// Si no es null, la lectura de hilos o mensajes lanza este error.
+  SmsReadException? failWith;
+
+  /// Retraso de cada lectura de hilos (para probar cargas simultáneas).
+  Duration delay = Duration.zero;
 
   @override
   Future<SmsPermission> permission() async => perm;
@@ -69,17 +79,26 @@ class FakeSmsSource implements SmsSource {
   @override
   Future<List<SmsThread>> threads() async {
     reads++;
-    return data;
+    active++;
+    if (active > maxActive) maxActive = active;
+    try {
+      if (delay > Duration.zero) await Future<void>.delayed(delay);
+      if (failWith != null) throw failWith!;
+      return data;
+    } finally {
+      active--;
+    }
   }
 
   @override
   Future<List<SmsMessage>> messages(String threadId) async {
     reads++;
+    if (failWith != null) throw failWith!;
     return msgs[threadId] ?? const [];
   }
 
   @override
-  Future<List<SimSubscription>> subscriptions() async => sims;
+  Future<SmsSimInfo> sims() async => simInfo;
 
   @override
   Future<bool> openComposer(String address) async {

@@ -1,28 +1,50 @@
 import 'package:flutter/cupertino.dart';
 
 import '../common.dart';
+import 'a11y.dart';
 import 'chat_repository.dart';
 import 'messages_page.dart';
 import 'models.dart';
+import 'palette.dart';
 import 'sms_repository.dart';
 
-CupertinoNavigationBar _bar(BuildContext context, String title, MessageChannel channel) {
+CupertinoNavigationBar _bar(BuildContext context, String title) {
   return CupertinoNavigationBar(
     previousPageTitle: 'Mensajes',
     backgroundColor: bgColor(context),
     border: Border(bottom: BorderSide(color: separatorColor(context), width: 0.6)),
-    middle: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: labelColor(context))),
-        const SizedBox(height: 2),
-        ChannelTag(channel),
-      ],
+    middle: Semantics(
+      header: true,
+      child: Text(title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: labelColor(context))),
     ),
   );
+}
+
+/// Franja bajo la barra con el canal: fuera de la barra para que crezca con el texto grande.
+class _ChannelStrip extends StatelessWidget {
+  const _ChannelStrip(this.channel, this.text);
+  final MessageChannel channel;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return InfoBlock(
+      label: '${channel == MessageChannel.chat ? 'NEXLIA Chat' : 'SMS'}. $text',
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 8, 14, 0),
+        child: Row(
+          children: [
+            ChannelTag(channel),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text, style: TextStyle(fontSize: 12.5, color: secondaryColor(context)))),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _Bubble extends StatelessWidget {
@@ -37,7 +59,7 @@ class _Bubble extends StatelessWidget {
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.76),
+        constraints: BoxConstraints(maxWidth: MediaQuery.sizeOf(context).width * 0.78),
         child: Container(
           margin: const EdgeInsets.symmetric(vertical: 3),
           padding: const EdgeInsets.fromLTRB(14, 9, 14, 7),
@@ -51,13 +73,12 @@ class _Bubble extends StatelessWidget {
             ),
           ),
           child: Column(
-            crossAxisAlignment: mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(text,
-                  style: TextStyle(
-                      fontSize: 16, height: 1.3, color: mine ? const Color(0xFFFFFFFF) : labelColor(context))),
+              Text(text, style: TextStyle(fontSize: 16, height: 1.3, color: mine ? onSolid : labelColor(context))),
               const SizedBox(height: 3),
-              footer,
+              Align(alignment: Alignment.centerRight, widthFactor: 1, child: footer),
             ],
           ),
         ),
@@ -73,23 +94,25 @@ class _Note extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-      decoration: BoxDecoration(color: fillColor(context), borderRadius: BorderRadius.circular(14)),
-      child: Row(
-        children: [
-          Icon(icon, size: 18, color: secondaryColor(context)),
-          const SizedBox(width: 8),
-          Expanded(
-              child: Text(text, style: TextStyle(fontSize: 13, height: 1.3, color: secondaryColor(context)))),
-        ],
+    return InfoBlock(
+      label: text,
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(color: fillColor(context), borderRadius: BorderRadius.circular(14)),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: secondaryColor(context)),
+            const SizedBox(width: 8),
+            Expanded(child: Text(text, style: TextStyle(fontSize: 13, height: 1.3, color: secondaryColor(context)))),
+          ],
+        ),
       ),
     );
   }
 }
 
-String _statusText(ChatMessageStatus s) => switch (s) {
+String statusText(ChatMessageStatus s) => switch (s) {
       ChatMessageStatus.pending => 'Pendiente',
       ChatMessageStatus.sent => 'Enviado',
       ChatMessageStatus.delivered => 'Entregado',
@@ -104,6 +127,17 @@ IconData _statusIcon(ChatMessageStatus s) => switch (s) {
       ChatMessageStatus.read => CupertinoIcons.checkmark_alt_circle_fill,
       ChatMessageStatus.failed => CupertinoIcons.exclamationmark_circle_fill,
     };
+
+/// Pie de burbuja: hora y estado. Wrap para que no se desborde con texto grande.
+Widget _footer(String time, Color color, {IconData? icon, String? status}) => Wrap(
+      spacing: 4,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(time, style: TextStyle(fontSize: 11, color: color)),
+        if (icon != null) Icon(icon, size: 13, color: color),
+        if (status != null) Text(status, style: TextStyle(fontSize: 11, color: color)),
+      ],
+    );
 
 /// Conversación de NEXLIA Chat (Internet). Solo envía cuando el usuario toca "Enviar".
 class ChatConversationPage extends StatefulWidget {
@@ -144,13 +178,13 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
       builder: (context, _) {
         final conv = widget.chat.conversation(widget.conversationId);
         final msgs = widget.chat.messagesOf(widget.conversationId);
-        final color = chatColor(context);
         return CupertinoPageScaffold(
           backgroundColor: bgColor(context),
-          navigationBar: _bar(context, conv?.peer.displayName ?? 'Conversación', MessageChannel.chat),
+          navigationBar: _bar(context, conv?.peer.displayName ?? 'Conversación'),
           child: SafeArea(
             child: Column(
               children: [
+                const _ChannelStrip(MessageChannel.chat, 'Mensajes por Internet'),
                 if (conv?.isDemo ?? false)
                   const _Note('Conversación de PRUEBA: los mensajes se quedan en este teléfono y no se envían a nadie.',
                       icon: CupertinoIcons.lab_flask)
@@ -167,12 +201,10 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
                       : ListView(
                           reverse: true,
                           padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                          children: [
-                            for (final m in msgs.reversed) _message(context, m, color),
-                          ],
+                          children: [for (final m in msgs.reversed) _message(context, m)],
                         ),
                 ),
-                _Composer(controller: text, color: color, onSend: _send, hint: 'Mensaje de NEXLIA Chat'),
+                _Composer(controller: text, color: chatSolid(context), onSend: _send, hint: 'Mensaje de NEXLIA Chat'),
               ],
             ),
           ),
@@ -181,41 +213,33 @@ class _ChatConversationPageState extends State<ChatConversationPage> {
     );
   }
 
-  Widget _message(BuildContext context, ChatMessage m, Color color) {
-    final footerColor = m.fromMe ? const Color(0xDDFFFFFF) : secondaryColor(context);
+  Widget _message(BuildContext context, ChatMessage m) {
     final failed = m.status == ChatMessageStatus.failed;
-    final footer = Row(
-      mainAxisSize: MainAxisSize.min,
+    final footerColor = m.fromMe ? onSolid : secondaryColor(context);
+    final time = formatTime(m.createdAt.toLocal());
+    return Column(
+      crossAxisAlignment: m.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
       children: [
-        Text(formatTime(m.createdAt.toLocal()), style: TextStyle(fontSize: 11, color: footerColor)),
-        if (m.fromMe) ...[
-          const SizedBox(width: 5),
-          Icon(_statusIcon(m.status), size: 13, color: failed ? const Color(0xFFFFD1CC) : footerColor),
-          const SizedBox(width: 3),
-          Text(_statusText(m.status), style: TextStyle(fontSize: 11, color: footerColor)),
-        ],
+        InfoBlock(
+          label: '${m.fromMe ? 'Tú' : 'Recibido'}, $time: ${m.text}${m.fromMe ? '. ${statusText(m.status)}' : ''}',
+          child: _Bubble(
+            mine: m.fromMe,
+            color: failed ? failedSolid : chatSolid(context),
+            text: m.text,
+            footer: m.fromMe
+                ? _footer(time, footerColor, icon: _statusIcon(m.status), status: statusText(m.status))
+                : _footer(time, footerColor),
+          ),
+        ),
+        if (failed && !m.isDemo)
+          ActionButton(
+            text: 'Reintentar',
+            hint: 'Volver a enviar este mensaje',
+            filled: false,
+            color: failedInk(context),
+            onPressed: () => widget.chat.retry(m.clientId),
+          ),
       ],
-    );
-    return Semantics(
-      label: '${m.fromMe ? 'Tú' : 'Recibido'}: ${m.text}. ${m.fromMe ? _statusText(m.status) : ''}',
-      excludeSemantics: true,
-      child: Column(
-        crossAxisAlignment: m.fromMe ? CrossAxisAlignment.end : CrossAxisAlignment.start,
-        children: [
-          _Bubble(
-              mine: m.fromMe,
-              color: failed ? const Color(0xFFE5484D) : color,
-              text: m.text,
-              footer: footer),
-          if (failed && !m.isDemo)
-            CupertinoButton(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              minimumSize: Size.zero,
-              onPressed: () => widget.chat.retry(m.clientId),
-              child: const Text('Reintentar', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
-            ),
-        ],
-      ),
     );
   }
 }
@@ -230,7 +254,7 @@ class _Composer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      padding: const EdgeInsets.fromLTRB(12, 6, 6, 6),
       decoration: BoxDecoration(
         color: bgColor(context),
         border: Border(top: BorderSide(color: separatorColor(context), width: 0.6)),
@@ -239,30 +263,32 @@ class _Composer extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Expanded(
-            child: CupertinoTextField(
-              controller: controller,
-              placeholder: hint,
-              minLines: 1,
-              maxLines: 5,
-              textCapitalization: TextCapitalization.sentences,
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              style: TextStyle(color: labelColor(context), fontSize: 16),
-              placeholderStyle: TextStyle(color: secondaryColor(context), fontSize: 16),
-              decoration: BoxDecoration(color: fillColor(context), borderRadius: BorderRadius.circular(22)),
+            child: Semantics(
+              container: true,
+              textField: true,
+              label: hint,
+              child: CupertinoTextField(
+                controller: controller,
+                placeholder: hint,
+                minLines: 1,
+                maxLines: 5,
+                textCapitalization: TextCapitalization.sentences,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                style: TextStyle(color: labelColor(context), fontSize: 16),
+                placeholderStyle: TextStyle(color: secondaryColor(context), fontSize: 16),
+                decoration: BoxDecoration(color: fillColor(context), borderRadius: BorderRadius.circular(22)),
+              ),
             ),
           ),
-          const SizedBox(width: 6),
-          Semantics(
-            button: true,
-            label: 'Enviar',
-            child: GestureDetector(
-              onTap: onSend,
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-                child: const Icon(CupertinoIcons.arrow_up, color: Color(0xFFFFFFFF), size: 22),
-              ),
+          Tappable(
+            label: 'Enviar mensaje',
+            radius: 24,
+            onTap: onSend,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+              child: const Icon(CupertinoIcons.arrow_up, color: onSolid, size: 22),
             ),
           ),
         ],
@@ -273,7 +299,8 @@ class _Composer extends StatelessWidget {
 
 /// Hilo SMS de solo lectura. Responder abre la app de SMS del sistema: NEXLIA no envía SMS.
 class SmsThreadPage extends StatefulWidget {
-  const SmsThreadPage({super.key, required this.sms, required this.threadId, required this.title, required this.address});
+  const SmsThreadPage(
+      {super.key, required this.sms, required this.threadId, required this.title, required this.address});
   final SmsRepository sms;
   final String threadId;
   final String title;
@@ -286,20 +313,43 @@ class SmsThreadPage extends StatefulWidget {
 class _SmsThreadPageState extends State<SmsThreadPage> {
   late Future<List<SmsMessage>> messages = widget.sms.messagesOf(widget.threadId);
 
+  void _retry() => setState(() => messages = widget.sms.messagesOf(widget.threadId));
+
   @override
   Widget build(BuildContext context) {
     return CupertinoPageScaffold(
       backgroundColor: bgColor(context),
-      navigationBar: _bar(context, widget.title, MessageChannel.sms),
+      navigationBar: _bar(context, widget.title),
       child: SafeArea(
         child: Column(
           children: [
+            const _ChannelStrip(MessageChannel.sms, 'Solo lectura'),
             Expanded(
               child: FutureBuilder<List<SmsMessage>>(
                 future: messages,
                 builder: (context, snap) {
                   if (snap.connectionState != ConnectionState.done) {
-                    return const Center(child: CupertinoActivityIndicator());
+                    return const Center(
+                        child: Semantics(label: 'Cargando SMS', child: CupertinoActivityIndicator()));
+                  }
+                  if (snap.hasError) {
+                    return Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const InfoBlock(
+                              label: 'No se pudieron leer los SMS de esta conversación.',
+                              child: Text('No se pudieron leer los SMS de esta conversación.',
+                                  textAlign: TextAlign.center),
+                            ),
+                            const SizedBox(height: 12),
+                            ActionButton(text: 'Reintentar', color: smsSolid, onPressed: _retry),
+                          ],
+                        ),
+                      ),
+                    );
                   }
                   final list = snap.data ?? const <SmsMessage>[];
                   if (list.isEmpty) {
@@ -327,13 +377,11 @@ class _SmsThreadPageState extends State<SmsThreadPage> {
                       textAlign: TextAlign.center,
                       style: TextStyle(fontSize: 12.5, color: secondaryColor(context))),
                   const SizedBox(height: 8),
-                  CupertinoButton(
-                    color: smsColor,
-                    borderRadius: BorderRadius.circular(22),
-                    padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 11),
-                    onPressed: widget.address.isEmpty ? null : () => widget.sms.reply(widget.address),
-                    child: const Text('Responder en la app de SMS',
-                        style: TextStyle(color: Color(0xFFFFFFFF), fontWeight: FontWeight.w700)),
+                  ActionButton(
+                    text: 'Responder en la app de SMS',
+                    hint: 'Abre la app de mensajes del teléfono',
+                    color: smsSolid,
+                    onPressed: widget.address.trim().isEmpty ? null : () => widget.sms.reply(widget.address),
                   ),
                 ],
               ),
@@ -347,22 +395,22 @@ class _SmsThreadPageState extends State<SmsThreadPage> {
   Widget _message(BuildContext context, SmsMessage m) {
     final mine = !m.incoming;
     final sim = widget.sms.simLabel(m.subId);
-    final footerColor = mine ? const Color(0xDDFFFFFF) : secondaryColor(context);
+    final footerColor = mine ? onSolid : secondaryColor(context);
     final box = switch (m.box) {
-      SmsBox.failed => ' · No enviado',
-      SmsBox.outbox || SmsBox.queued => ' · En cola',
-      SmsBox.draft => ' · Borrador',
+      SmsBox.failed => 'No enviado',
+      SmsBox.outbox || SmsBox.queued => 'En cola',
+      SmsBox.draft => 'Borrador',
       _ => '',
     };
-    return Semantics(
-      label: '${mine ? 'Enviado' : 'Recibido'}${sim.isEmpty ? '' : ' por $sim'}: ${m.body}',
-      excludeSemantics: true,
+    final when = '${formatDay(m.date)} ${formatTime(m.date)}';
+    final parts = [when, if (sim.isNotEmpty) sim, if (box.isNotEmpty) box];
+    return InfoBlock(
+      label: '${mine ? 'Enviado' : 'Recibido'}, ${parts.join(', ')}: ${m.body}',
       child: _Bubble(
         mine: mine,
-        color: smsColor,
+        color: m.box == SmsBox.failed ? failedSolid : smsSolid,
         text: m.body,
-        footer: Text('${formatDay(m.date)} ${formatTime(m.date)}${sim.isEmpty ? '' : ' · $sim'}$box',
-            style: TextStyle(fontSize: 11, color: footerColor)),
+        footer: Text(parts.join(' · '), style: TextStyle(fontSize: 11, color: footerColor)),
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/cupertino.dart';
 
 import '../common.dart';
+import 'a11y.dart';
 import 'chat_api.dart';
 import 'chat_repository.dart';
 import 'models.dart';
@@ -48,6 +49,7 @@ class MessagingSettingsPage extends StatelessWidget {
                   SmsPermission.denied => 'Sin permiso',
                   SmsPermission.unavailable => 'No disponible',
                 }),
+                _info(context, 'SIM', _simText(sms.sims, sms.canRead)),
                 _info(context, 'Enviar SMS', 'Desde la app de SMS del teléfono'),
               ]),
               _footer(context,
@@ -87,20 +89,35 @@ class MessagingSettingsPage extends StatelessWidget {
     );
   }
 
+  /// Estado de las SIM según lo que Android informa (puede ser incompleto).
+  static String _simText(SmsSimInfo s, bool read) {
+    if (!read) return 'Se muestra al ver los SMS';
+    if (!s.readable) return 'Android no permite leerlas';
+    final n = s.active.length;
+    final active = n == 0 ? 'ninguna activa' : (n == 1 ? '1 activa' : '$n activas');
+    return s.slots > 0 ? '${s.slots} ranura${s.slots == 1 ? '' : 's'} · $active' : active;
+  }
+
+  /// Interruptor con su texto: un solo nodo para el lector ("Etiqueta, activado").
   Widget _toggle(BuildContext context, String label, bool value, ValueChanged<bool> onChanged) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(child: Text(label, style: TextStyle(fontSize: 16, color: labelColor(context)))),
-          CupertinoSwitch(value: value, onChanged: onChanged),
-        ],
+    return MergeSemantics(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: minTouch),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+          child: Row(
+            children: [
+              Expanded(child: Text(label, style: TextStyle(fontSize: 16, color: labelColor(context)))),
+              CupertinoSwitch(value: value, onChanged: onChanged),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   Widget _info(BuildContext context, String label, String value) {
-    return Padding(
+    return MergeSemantics(child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
       child: Row(
         children: [
@@ -113,7 +130,7 @@ class MessagingSettingsPage extends StatelessWidget {
           ),
         ],
       ),
-    );
+    ));
   }
 
   Widget _footer(BuildContext context, String text) => Padding(

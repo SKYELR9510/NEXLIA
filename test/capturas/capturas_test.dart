@@ -11,6 +11,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phone/common.dart';
 import 'package:phone/messaging/chat_api.dart';
+import 'package:phone/messaging/a11y.dart';
 import 'package:phone/messaging/chat_repository.dart';
 import 'package:phone/messaging/messages_page.dart';
 import 'package:phone/messaging/models.dart';
@@ -74,7 +75,7 @@ void main() {
     if (!full) return (chat, SmsRepository(FakeSmsSource()));
     await chat.setDemo(true);
     final src = FakeSmsSource(perm: SmsPermission.granted)
-      ..sims = [const SimSubscription(1, 'SIM 1', 1), const SimSubscription(2, 'SIM 2', 2)]
+      ..simInfo = const SmsSimInfo(slots: 2, active: [SimSubscription(1, 'Claro', 1), SimSubscription(2, 'Movistar', 2)])
       ..data = [
         SmsThread(
             threadId: '1',
@@ -119,11 +120,14 @@ void main() {
         _ => a,
       };
 
-  Widget app(Widget home, Brightness b) => RepaintBoundary(
+  Widget app(Widget home, Brightness b, {double scale = 1, bool semantics = false}) => RepaintBoundary(
         key: key,
         child: CupertinoApp(
           debugShowCheckedModeBanner: false,
+          showSemanticsDebugger: semantics,
           theme: CupertinoThemeData(brightness: b, primaryColor: AppTheme.accents[0]),
+          builder: (c, child) =>
+              MediaQuery(data: MediaQuery.of(c).copyWith(textScaler: TextScaler.linear(scale)), child: child!),
           home: CupertinoPageScaffold(
             backgroundColor: b == Brightness.dark ? const Color(0xFF050A16) : const Color(0xFFFFFFFF),
             child: SafeArea(child: home),
@@ -162,5 +166,33 @@ void main() {
       await t.pumpWidget(app(MessagesPage(chat: chat, sms: sms), b));
       await shot(t, '4_vacio_$suffix');
     }, skip: _dir.isEmpty);
+
+    testWidgets('accesibilidad: texto grande y foco de teclado ($suffix)', (t) async {
+      setSize(t);
+      final (chat, sms) = await repos();
+      // Texto al 160 %: la fila y sus etiquetas crecen sin cortarse.
+      await t.pumpWidget(app(MessagesPage(chat: chat, sms: sms, nameFor: name), b, scale: 1.6));
+      await shot(t, '5_texto_grande_$suffix');
+      // Foco de teclado sobre una conversación (Tab hasta "Ana (prueba)").
+      await t.pumpWidget(app(MessagesPage(chat: chat, sms: sms, nameFor: name), b));
+      await t.pumpAndSettle();
+      for (var i = 0; i < 20; i++) {
+        await t.sendKeyEvent(LogicalKeyboardKey.tab);
+        await t.pumpAndSettle();
+        final l = FocusManager.instance.primaryFocus?.context?.findAncestorWidgetOfExactType<Tappable>()?.label ?? '';
+        if (l.startsWith('Ana (prueba)')) break;
+      }
+      await shot(t, '6_foco_teclado_$suffix');
+    }, skip: _dir.isEmpty);
   }
+
+  testWidgets('accesibilidad: nodos del lector de pantalla', (t) async {
+    setSize(t);
+    final (chat, _) = await repos();
+    // Permiso dado por el rol, sin consentimiento: tarjeta con texto y botón separados.
+    final src = FakeSmsSource(perm: SmsPermission.granted);
+    final sms = SmsRepository(src);
+    await t.pumpWidget(app(MessagesPage(chat: chat, sms: sms, nameFor: name), Brightness.light, semantics: true));
+    await shot(t, '7_lector_de_pantalla');
+  }, skip: _dir.isEmpty);
 }

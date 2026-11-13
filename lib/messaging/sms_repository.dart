@@ -5,12 +5,13 @@ import 'models.dart';
 import 'store.dart';
 
 /// Origen de SMS: el proveedor de Android. NEXLIA solo lee.
+/// [threads] y [messages] lanzan [SmsReadException] si la lectura falla.
 abstract class SmsSource {
   Future<SmsPermission> permission();
   Future<bool> requestPermission();
   Future<List<SmsThread>> threads();
   Future<List<SmsMessage>> messages(String threadId);
-  Future<List<SimSubscription>> subscriptions();
+  Future<SmsSimInfo> sims();
 
   /// Abre la app de SMS del sistema con el destinatario (acción del usuario).
   Future<bool> openComposer(String address);
@@ -27,7 +28,7 @@ class NativeSmsSource implements SmsSource {
   @override
   Future<List<SmsMessage>> messages(String threadId) => Native.getSmsMessages(threadId);
   @override
-  Future<List<SimSubscription>> subscriptions() => Native.getSimSubscriptions();
+  Future<SmsSimInfo> sims() => Native.getSimSubscriptions();
   @override
   Future<bool> openComposer(String address) => Native.sendSms(address);
 }
@@ -48,18 +49,56 @@ class SmsRepository extends ChangeNotifier {
   SmsPermission permission = SmsPermission.unavailable;
   bool consent = false;
   List<SmsThread> threads = const [];
-  List<SimSubscription> subscriptions = const [];
+  SmsSimInfo sims = SmsSimInfo.none;
   bool loaded = false;
+
+  /// Último error de lectura (null si la última lectura fue bien o no se leyó).
+  SmsReadErrorKind? error;
+
+  Future<void>? _loading;
+  bool _again = false;
 
   /// Solo se leen SMS con permiso de Android y consentimiento en la app.
   bool get canRead => consent && permission == SmsPermission.granted;
 
-  Future<void> load() async {
+  /// El usuario aceptó en NEXLIA, pero el permiso de Android ya no está (retirado en Ajustes).
+  bool get permissionRevoked => consent && permission == SmsPermission.denied;
+
+  /// Carga permiso, consentimiento, SIM e hilos. Si ya hay una carga en curso, no
+  /// lanza otra en paralelo: la repite al terminar, para no pisar datos más nuevos.
+  Future<void> load() {
+    if (_loading != null) {
+      _again = true;
+      return _loading!;
+    }
+    return _loading = _run();
+  }
+
+  Future<void> _run() async {
+    try {
+      do {
+        _again = false;
+        await _loadOnce();
+      } while (_again);
+    } finally {
+      _loading = null;
+    }
+  }
+
+  Future<void> _loadOnce() async {
     permission = await source.permission();
     consent = await store.read(consentKey) == '1';
+    error = null;
     if (canRead) {
-      subscriptions = await source.subscriptions();
-      threads = await source.threads();
+      sims = await source.sims();
+      try {
+        threads = await source.threads();
+      } on SmsReadException catch (e) {
+        threads = const [];
+        error = e.kind;
+        if (e.kind == SmsReadErrorKind.permission) permission = SmsPermission.denied;
+        if (e.kind == SmsReadErrorKind.unavailable) permission = SmsPermission.unavailable;
+      }
     } else {
       threads = const [];
     }
@@ -84,19 +123,14 @@ class SmsRepository extends ChangeNotifier {
     await load();
   }
 
+  /// Mensajes de un hilo. Lanza [SmsReadException] si la lectura falla.
   Future<List<SmsMessage>> messagesOf(String threadId) async {
     if (!canRead) return const [];
     return source.messages(threadId);
   }
 
-  /// Etiqueta de SIM solo con dos o más SIM (igual que en llamadas).
-  String simLabel(int subId) {
-    if (subscriptions.length < 2 || subId < 0) return '';
-    for (final s in subscriptions) {
-      if (s.subId == subId) return s.label.isEmpty ? 'SIM ${s.slot}' : s.label;
-    }
-    return '';
-  }
+  /// Etiqueta de la SIM de un SMS (ver [simLabelFor]).
+  String simLabel(int subId) => simLabelFor(sims, subId);
 
   Future<bool> reply(String address) => source.openComposer(address);
 }

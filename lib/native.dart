@@ -234,7 +234,11 @@ class Native {
   static Future<SmsPermission> smsPermission() async {
     try {
       final s = await _ch.invokeMethod<String>('smsPermission');
-      return s == 'granted' ? SmsPermission.granted : SmsPermission.denied;
+      return switch (s) {
+        'granted' => SmsPermission.granted,
+        'unavailable' => SmsPermission.unavailable,
+        _ => SmsPermission.denied,
+      };
     } catch (_) {
       return SmsPermission.unavailable;
     }
@@ -242,31 +246,37 @@ class Native {
 
   static Future<bool> requestSmsPermission() => _bool('requestSmsPermission');
 
-  static Future<List<SmsThread>> getSmsThreads() async {
+  /// Convierte los errores del canal en [SmsReadException] para que la interfaz
+  /// distinga "sin SMS" de "no se pudieron leer".
+  static Future<List<dynamic>> _smsList(String method, [Map<String, dynamic>? args]) async {
     try {
-      final rows = await _ch.invokeMethod<List<dynamic>>('getSmsThreads') ?? [];
-      return rows.whereType<Map>().map(SmsThread.fromMap).toList();
-    } catch (_) {
-      return [];
+      return await _ch.invokeMethod<List<dynamic>>(method, args) ?? const [];
+    } on PlatformException catch (e) {
+      throw SmsReadException(switch (e.code) {
+        'permission' => SmsReadErrorKind.permission,
+        'unavailable' => SmsReadErrorKind.unavailable,
+        _ => SmsReadErrorKind.provider,
+      }, e.message ?? '');
+    } on MissingPluginException {
+      throw const SmsReadException(SmsReadErrorKind.unavailable);
     }
   }
 
-  static Future<List<SmsMessage>> getSmsMessages(String threadId) async {
-    try {
-      final rows =
-          await _ch.invokeMethod<List<dynamic>>('getSmsMessages', {'threadId': threadId}) ?? [];
-      return rows.whereType<Map>().map(SmsMessage.fromMap).toList();
-    } catch (_) {
-      return [];
-    }
-  }
+  static Future<List<SmsThread>> getSmsThreads() async =>
+      (await _smsList('getSmsThreads')).whereType<Map>().map(SmsThread.fromMap).toList();
 
-  static Future<List<SimSubscription>> getSimSubscriptions() async {
+  static Future<List<SmsMessage>> getSmsMessages(String threadId) async =>
+      (await _smsList('getSmsMessages', {'threadId': threadId}))
+          .whereType<Map>()
+          .map(SmsMessage.fromMap)
+          .toList();
+
+  /// SIM para etiquetar SMS. Si falla, se devuelve "sin información" (nunca bloquea los SMS).
+  static Future<SmsSimInfo> getSimSubscriptions() async {
     try {
-      final rows = await _ch.invokeMethod<List<dynamic>>('getSimSubscriptions') ?? [];
-      return rows.whereType<Map>().map(SimSubscription.fromMap).toList();
+      return SmsSimInfo.fromNative(await _ch.invokeMethod<Object?>('getSimSubscriptions'));
     } catch (_) {
-      return [];
+      return const SmsSimInfo(readable: false);
     }
   }
 

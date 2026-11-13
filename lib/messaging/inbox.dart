@@ -57,7 +57,8 @@ List<InboxItem> smsItems(SmsRepository sms, String Function(String address) name
         InboxItem(
           channel: MessageChannel.sms,
           id: t.threadId,
-          title: nameFor(t.address),
+          // Borradores o remitentes sin número: el proveedor puede dar la dirección vacía.
+          title: t.address.trim().isEmpty ? 'Sin número' : nameFor(t.address),
           preview: t.snippet,
           time: t.date,
           unread: t.unreadCount,

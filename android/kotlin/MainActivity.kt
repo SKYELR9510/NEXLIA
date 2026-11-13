@@ -114,6 +114,19 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    /** Lectura de SMS en segundo plano; los errores llegan a Dart con su código. */
+    private fun bgSms(result: MethodChannel.Result, f: () -> Any?) {
+        io.execute {
+            try {
+                if (!has(Manifest.permission.READ_SMS)) throw SmsReader.ReadError("permission", "Sin READ_SMS")
+                val r = f()
+                runOnUiThread { result.success(r) }
+            } catch (e: Exception) {
+                runOnUiThread { result.error(SmsReader.classify(e), e.message, null) }
+            }
+        }
+    }
+
     private fun handle(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "isDefaultDialer" -> result.success(isDefaultDialer())
@@ -279,20 +292,24 @@ class MainActivity : FlutterActivity() {
                 result.success(true)
             }
             // ---- SMS de solo lectura (Fase 1). Sin READ_SMS no se lee nada. ----
-            "smsPermission" -> result.success(if (has(Manifest.permission.READ_SMS)) "granted" else "denied")
+            "smsPermission" -> result.success(
+                when {
+                    !SmsReader.hasSmsFeature(this) -> "unavailable"
+                    has(Manifest.permission.READ_SMS) -> "granted"
+                    else -> "denied"
+                }
+            )
             "requestSmsPermission" -> {
                 if (has(Manifest.permission.READ_SMS)) result.success(true)
                 else if (pending.add(REQ_SMS, result)) {
                     requestPermissions(arrayOf(Manifest.permission.READ_SMS), REQ_SMS)
                 }
             }
-            "getSmsThreads" -> bg(result) {
-                if (!has(Manifest.permission.READ_SMS)) emptyList<Map<String, Any?>>() else SmsReader.threads(this)
-            }
-            "getSmsMessages" -> bg(result) {
+            "getSmsThreads" -> bgSms(result) { SmsReader.threads(this) }
+            "getSmsMessages" -> {
                 val id = (call.argument<String>("threadId") ?: "").toLongOrNull()
-                if (!has(Manifest.permission.READ_SMS) || id == null) emptyList<Map<String, Any?>>()
-                else SmsReader.messages(this, id)
+                if (id == null) result.success(emptyList<Map<String, Any?>>())
+                else bgSms(result) { SmsReader.messages(this, id) }
             }
             "getSimSubscriptions" -> bg(result) { SmsReader.subscriptions(this) }
             "getSpamData" -> result.success(SpamStore.allJson(this))

@@ -51,7 +51,7 @@ void main() {
     await c.setDemo(true);
     final src = FakeSmsSource(perm: SmsPermission.granted)
       ..data = [SmsThread(threadId: '7', address: '+51900000007', snippet: 'hola', date: t0, subId: 2)]
-      ..sims = [const SimSubscription(1, 'Claro', 1), const SimSubscription(2, '', 2)];
+      ..simInfo = const SmsSimInfo(slots: 2, active: [SimSubscription(1, 'Claro', 1), SimSubscription(2, '', 2)]);
     final s = SmsRepository(src, store: consented());
     await s.load();
 

@@ -119,8 +119,29 @@ class ChatMessage {
       );
 }
 
-/// Permiso de lectura de SMS.
+/// Permiso de lectura de SMS. `unavailable`: el dispositivo no tiene mensajería
+/// (por ejemplo, una tablet sin telefonía) o el puente nativo no responde.
 enum SmsPermission { granted, denied, unavailable }
+
+/// Por qué falló una lectura de SMS.
+enum SmsReadErrorKind {
+  /// Android retiró el permiso entre la comprobación y la consulta.
+  permission,
+
+  /// El proveedor de SMS falló (consulta rechazada, cursor nulo, base de datos ocupada...).
+  provider,
+
+  /// No hay proveedor de SMS en el dispositivo.
+  unavailable,
+}
+
+class SmsReadException implements Exception {
+  const SmsReadException(this.kind, [this.detail = '']);
+  final SmsReadErrorKind kind;
+  final String detail;
+  @override
+  String toString() => 'SmsReadException(${kind.name}: $detail)';
+}
 
 /// Bandeja del proveedor de SMS de Android (Telephony.Sms.TYPE).
 enum SmsBox { inbox, sent, draft, outbox, failed, queued, other }
@@ -223,4 +244,56 @@ class SimSubscription {
         (m['label'] ?? '').toString(),
         (m['slot'] as num?)?.toInt() ?? 0,
       );
+}
+
+/// Lo que Android informa de las SIM para etiquetar SMS.
+/// [slots]: ranuras del teléfono (0 si no se sabe). [active]: SIM activas legibles.
+/// [readable]: false si Android no dejó leer las SIM (falta READ_PHONE_STATE).
+class SmsSimInfo {
+  const SmsSimInfo({this.slots = 0, this.active = const [], this.readable = true});
+  final int slots;
+  final List<SimSubscription> active;
+  final bool readable;
+
+  static const none = SmsSimInfo();
+
+  /// Acepta el formato actual ({slots, subs, readable}) y la lista simple anterior.
+  static SmsSimInfo fromNative(Object? raw) {
+    if (raw is List) {
+      return SmsSimInfo(active: raw.whereType<Map>().map(SimSubscription.fromMap).toList());
+    }
+    if (raw is Map) {
+      return SmsSimInfo(
+        slots: (raw['slots'] as num?)?.toInt() ?? 0,
+        active: ((raw['subs'] as List?) ?? const []).whereType<Map>().map(SimSubscription.fromMap).toList(),
+        readable: raw['readable'] != false,
+      );
+    }
+    return none;
+  }
+
+  /// El teléfono admite dos o más SIM (aunque ahora tenga una sola o ninguna).
+  bool get multiSim => (slots > 0 ? slots : active.length) >= 2;
+}
+
+const simUnknown = 'SIM no identificada';
+
+/// Etiqueta de la SIM de un SMS.
+/// - Teléfono de una sola ranura: '' (no se muestra, igual que en llamadas).
+/// - Dos o más ranuras y la SIM del SMS está activa: "SIM n" o "SIM n · Operador".
+/// - Dos o más ranuras y Android no da una SIM fiable (sub_id ausente, SIM retirada o
+///   desactivada, o sin permiso para leer las SIM): "SIM no identificada".
+String simLabelFor(SmsSimInfo sims, int subId) {
+  if (!sims.multiSim) return '';
+  if (subId < 0) return simUnknown;
+  for (final s in sims.active) {
+    if (s.subId != subId) continue;
+    final base = s.slot > 0 ? 'SIM ${s.slot}' : '';
+    final name = s.label.trim();
+    final duplicated = sims.active.where((o) => o.label.trim() == name).length > 1;
+    if (base.isEmpty) return name.isEmpty ? simUnknown : name;
+    if (name.isEmpty || duplicated || name.toLowerCase() == base.toLowerCase()) return base;
+    return '$base · $name';
+  }
+  return simUnknown;
 }

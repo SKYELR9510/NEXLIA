@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-java@v4
         with:
@@ -44,11 +46,37 @@ jobs:
       - name: Análisis estático
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
+      - name: Análisis estático sin opciones (informativo)
+        run: |
+          set +e
+          flutter analyze > analyze.txt 2>&1; code=$?
+          tail -3 analyze.txt
+          echo "flutter analyze (sin opciones): código $code"
+          grep -cE "^ *error •" analyze.txt | sed 's/^/errores: /'
+          grep -cE "^ *warning •" analyze.txt | sed 's/^/advertencias: /'
+          grep -cE "^ *info •" analyze.txt | sed 's/^/avisos informativos: /'
+
+      - name: Espacios y finales de línea (git diff --check)
+        if: github.ref != 'refs/heads/main'
+        run: |
+          git fetch -q origin main
+          git diff --check origin/main...HEAD && echo "git diff --check: sin problemas"
+
       - name: Pruebas Dart
         run: flutter test
 
       - name: Compilar APK debug
         run: flutter build apk --debug
+
+      - name: Compilar APK release (sin publicar)
+        run: |
+          # Sin android/app/nexlia.keystore, build.gradle.kts firma la release con la clave
+          # de depuración: sirve para comprobar que compila (R8, recursos), no para distribuir.
+          flutter build apk --release
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          $BT/aapt2 dump badging build/app/outputs/flutter-apk/app-release.apk | grep -E "^package:|^minSdkVersion|^targetSdkVersion"
+          $BT/apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -E "Signer #1 certificate (DN|SHA-256)"
+          $BT/aapt2 dump permissions build/app/outputs/flutter-apk/app-release.apk | sort
 
       - name: Pruebas Kotlin
         working-directory: android
