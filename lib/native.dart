@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'messaging/models.dart';
+
 class Contact {
   Contact(this.id, this.name, this.numbers, this.starred, this.hasPhoto);
   final String id;
@@ -224,6 +226,47 @@ class Native {
       return await _ch.invokeMethod<String>('getVersion') ?? '';
     } catch (_) {
       return '';
+    }
+  }
+
+  // ---- SMS (solo lectura; la mensajería los usa a través de SmsRepository) ----
+
+  static Future<SmsPermission> smsPermission() async {
+    try {
+      final s = await _ch.invokeMethod<String>('smsPermission');
+      return s == 'granted' ? SmsPermission.granted : SmsPermission.denied;
+    } catch (_) {
+      return SmsPermission.unavailable;
+    }
+  }
+
+  static Future<bool> requestSmsPermission() => _bool('requestSmsPermission');
+
+  static Future<List<SmsThread>> getSmsThreads() async {
+    try {
+      final rows = await _ch.invokeMethod<List<dynamic>>('getSmsThreads') ?? [];
+      return rows.whereType<Map>().map(SmsThread.fromMap).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<List<SmsMessage>> getSmsMessages(String threadId) async {
+    try {
+      final rows =
+          await _ch.invokeMethod<List<dynamic>>('getSmsMessages', {'threadId': threadId}) ?? [];
+      return rows.whereType<Map>().map(SmsMessage.fromMap).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  static Future<List<SimSubscription>> getSimSubscriptions() async {
+    try {
+      final rows = await _ch.invokeMethod<List<dynamic>>('getSimSubscriptions') ?? [];
+      return rows.whereType<Map>().map(SimSubscription.fromMap).toList();
+    } catch (_) {
+      return [];
     }
   }
 

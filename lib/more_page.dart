@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/cupertino.dart';
 
 import 'common.dart';
+import 'messaging/messaging.dart';
+import 'messaging/messaging_settings_page.dart';
 import 'native.dart';
 import 'sim_choice.dart';
 import 'spam_page.dart';
@@ -35,6 +37,11 @@ class MorePage extends StatelessWidget {
             'Fondo propio y video al recibir llamadas', () => _push(context, const CallStylePage())),
         _row(context, CupertinoIcons.antenna_radiowaves_left_right, const Color(0xFF00B8D9),
             'SIM para llamar', _simSubtitle(), () => _push(context, const SimSettingsPage())),
+        _row(context, CupertinoIcons.recordingtape, const Color(0xFF1466FF), 'Buzón de voz',
+            'Llamar al buzón de tu operador', () => _push(context, const VoicemailPage(asTab: false))),
+        _row(context, CupertinoIcons.chat_bubble_2_fill, const Color(0xFF12B886), 'Mensajes',
+            'NEXLIA Chat, SMS y conversaciones de prueba',
+            () => _push(context, MessagingSettingsPage(chat: Messaging.chat, sms: Messaging.sms))),
         _row(context, CupertinoIcons.shield_lefthalf_fill, const Color(0xFF5E5CE6),
             'Bloqueo de llamadas', 'Spam, desconocidos y números bloqueados',
             () => _push(context, const SpamPage())),
@@ -280,18 +287,35 @@ class AppearancePage extends StatelessWidget {
   }
 }
 
-/// Pestaña "Buzón": llama al buzón de voz del operador.
+/// Buzón de voz: llama al buzón del operador. Desde la Fase 1 se abre desde Más.
 class VoicemailPage extends StatelessWidget {
-  const VoicemailPage({super.key});
+  const VoicemailPage({super.key, this.asTab = true});
+
+  /// true: contenido de pestaña (como antes). false: página propia con barra de vuelta.
+  final bool asTab;
 
   @override
   Widget build(BuildContext context) {
+    if (asTab) return _body(context);
+    return CupertinoPageScaffold(
+      backgroundColor: bgColor(context),
+      navigationBar: CupertinoNavigationBar(
+        middle: Text('Buzón de voz', style: TextStyle(color: labelColor(context))),
+        previousPageTitle: 'Más',
+        backgroundColor: bgColor(context),
+        border: null,
+      ),
+      child: SafeArea(child: _body(context)),
+    );
+  }
+
+  Widget _body(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.only(bottom: barSpace(context)),
+      padding: EdgeInsets.only(bottom: asTab ? barSpace(context) : 0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const ScreenTitle('Buzón de voz'),
+          if (asTab) const ScreenTitle('Buzón de voz'),
           const Spacer(),
           Center(
             child: Container(

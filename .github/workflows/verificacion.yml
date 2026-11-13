@@ -70,3 +70,78 @@ jobs:
 
       - name: Sintaxis PHP
         run: for f in servidor/*.php; do php -l "$f"; done
+
+  # Fase 1: migraciones de NEXLIA Chat sobre MySQL 8 (arriba, abajo, arriba).
+  migraciones-chat:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: solo-ci
+          MYSQL_DATABASE: nexlia_ci
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -psolo-ci"
+          --health-interval=5s --health-timeout=5s --health-retries=20
+    env:
+      MYSQL_PWD: solo-ci
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Esquema de spam existente (para comprobar que no se toca)
+        run: mysql -h 127.0.0.1 -uroot nexlia_ci < servidor/schema.sql
+
+      - name: Subir, bajar y volver a subir
+        run: |
+          set -e
+          q() { mysql -h 127.0.0.1 -uroot nexlia_ci -N -e "$1"; }
+          tablas() { q "SELECT table_name FROM information_schema.tables WHERE table_schema='nexlia_ci' ORDER BY table_name" | tr '\n' ' '; echo; }
+          d=servidor/chat/migraciones
+          mysql -h 127.0.0.1 -uroot nexlia_ci < $d/001_chat_base.up.sql
+          echo "Tras subir:  $(tablas)"
+          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'chat\_%'")" = 7
+          # Idempotencia: el mismo client_id del mismo remitente no se duplica.
+          q "INSERT INTO chat_users (public_id, display_name) VALUES ('01PRUEBA0000000000000000U1','Prueba')"
+          q "INSERT INTO chat_conversations (public_id) VALUES ('01PRUEBA0000000000000000C1')"
+          q "INSERT INTO chat_conversation_members VALUES (1, 1, DEFAULT)"
+          q "INSERT INTO chat_messages (public_id, conversation_id, sender_id, client_id, body) VALUES ('01PRUEBA0000000000000000M1',1,1,'c-1','hola')"
+          if q "INSERT INTO chat_messages (public_id, conversation_id, sender_id, client_id, body) VALUES ('01PRUEBA0000000000000000M2',1,1,'c-1','hola')" 2>/dev/null; then
+            echo "::error::client_id duplicado aceptado"; exit 1
+          fi
+          echo "Duplicado rechazado por uq_chat_messages_idem"
+          mysql -h 127.0.0.1 -uroot nexlia_ci < $d/001_chat_base.down.sql
+          echo "Tras bajar:  $(tablas)"
+          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'chat\_%'")" = 0
+          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'spam\_%'")" = 2
+          mysql -h 127.0.0.1 -uroot nexlia_ci < $d/001_chat_base.up.sql
+          echo "Tras volver a subir: $(tablas)"
+          test "$(q "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='nexlia_ci' AND table_name LIKE 'chat\_%'")" = 7
+
+  # Fase 1: capturas de la interfaz de mensajería (datos de prueba). Informativo.
+  capturas:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+      - run: flutter pub get --enforce-lockfile
+      - name: Generar capturas
+        run: |
+          mkdir -p capturas
+          export FLUTTER_ROOT="$(dirname "$(dirname "$(command -v flutter)")")"
+          CAPTURAS_DIR="$PWD/capturas" flutter test test/capturas/capturas_test.dart
+          ls -la capturas
+          sha256sum capturas/*.png
+      - name: Capturas en el registro (base64)
+        run: |
+          tar -C capturas -czf capturas.tgz .
+          echo "BEGIN_CAPTURAS"; base64 -w 76 capturas.tgz; echo "END_CAPTURAS"
+          sha256sum capturas.tgz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: capturas-mensajeria
+          path: capturas/*.png
+          retention-days: 14

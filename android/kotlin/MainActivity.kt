@@ -34,6 +34,7 @@ class MainActivity : FlutterActivity() {
     private val REQ_ROLE = 1001
     private val REQ_PERMS = 1002
     private val REQ_PICK = 1003
+    private val REQ_SMS = 1004
     private var pickKind = "image"
     private var pendingShare: Map<String, Any?>? = null
 
@@ -247,6 +248,7 @@ class MainActivity : FlutterActivity() {
                     "sound" -> Intent(Settings.ACTION_SOUND_SETTINGS)
                     "sim" -> Intent(Settings.ACTION_WIRELESS_SETTINGS)
                     "defaults" -> Intent(Settings.ACTION_MANAGE_DEFAULT_APPS_SETTINGS)
+                    "app" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null))
                     else -> Intent(Settings.ACTION_SETTINGS)
                 }
                 try { startActivity(i) } catch (e: Exception) { startActivity(Intent(Settings.ACTION_SETTINGS)) }
@@ -276,6 +278,23 @@ class MainActivity : FlutterActivity() {
                 try { getSystemService(TelecomManager::class.java).silenceRinger() } catch (e: Exception) { }
                 result.success(true)
             }
+            // ---- SMS de solo lectura (Fase 1). Sin READ_SMS no se lee nada. ----
+            "smsPermission" -> result.success(if (has(Manifest.permission.READ_SMS)) "granted" else "denied")
+            "requestSmsPermission" -> {
+                if (has(Manifest.permission.READ_SMS)) result.success(true)
+                else if (pending.add(REQ_SMS, result)) {
+                    requestPermissions(arrayOf(Manifest.permission.READ_SMS), REQ_SMS)
+                }
+            }
+            "getSmsThreads" -> bg(result) {
+                if (!has(Manifest.permission.READ_SMS)) emptyList<Map<String, Any?>>() else SmsReader.threads(this)
+            }
+            "getSmsMessages" -> bg(result) {
+                val id = (call.argument<String>("threadId") ?: "").toLongOrNull()
+                if (!has(Manifest.permission.READ_SMS) || id == null) emptyList<Map<String, Any?>>()
+                else SmsReader.messages(this, id)
+            }
+            "getSimSubscriptions" -> bg(result) { SmsReader.subscriptions(this) }
             "getSpamData" -> result.success(SpamStore.allJson(this))
             "setSpamSettings" -> { SpamStore.saveSettings(this, call.argument<String>("json") ?: "{}"); result.success(true) }
             "setBlocked" -> { SpamStore.saveBlocked(this, call.argument<String>("json") ?: "[]"); result.success(true) }
@@ -427,6 +446,10 @@ class MainActivity : FlutterActivity() {
 
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<String>, grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQ_SMS) {
+            val ok = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }
+            pending.take(REQ_SMS).forEach { it.success(ok) }
+        }
         if (requestCode == REQ_PERMS) {
             // Un resultado vacío significa que el diálogo se interrumpió: no es "todo concedido".
             val ok = grantResults.isNotEmpty() && grantResults.all { it == PackageManager.PERMISSION_GRANTED }

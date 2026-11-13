@@ -5,6 +5,9 @@
     <uses-permission android:name="android.permission.WRITE_CALL_LOG"/>
     <uses-permission android:name="android.permission.CALL_PHONE"/>
     <uses-permission android:name="android.permission.READ_PHONE_STATE"/>
+    <!-- Fase 1: bandeja SMS de solo lectura. Se pide en contexto (pestaña Mensajes > SMS).
+         No se solicita el rol SMS ni SEND_SMS/RECEIVE_SMS: ver docs/FASE1_MENSAJERIA.md §9. -->
+    <uses-permission android:name="android.permission.READ_SMS"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
