@@ -1,0 +1,46 @@
+# Validación temporal de la Fase 1 en emulador. Solo en tmp/validacion-fase1. No publica nada.
+name: Validación Fase 1 en emulador (no publica)
+
+on:
+  push:
+    branches: [tmp/validacion-fase1]
+
+permissions:
+  contents: read
+
+jobs:
+  emulador:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        api-level: [29, 31, 33, 34, 35]
+    name: emulador (API ${{ matrix.api-level }})
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.50.0
+      - name: APK debug de la rama
+        run: |
+          flutter pub get --enforce-lockfile
+          flutter build apk --debug
+          sha256sum build/app/outputs/flutter-apk/app-debug.apk
+      - name: Habilitar KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: ${{ matrix.api-level }}
+          arch: x86_64
+          target: default
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim
+          script: bash ci/validacion_fase1.sh build/app/outputs/flutter-apk/app-debug.apk
