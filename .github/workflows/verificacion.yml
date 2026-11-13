@@ -75,7 +75,7 @@ jobs:
           flutter build apk --release
           BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
           $BT/aapt2 dump badging build/app/outputs/flutter-apk/app-release.apk | grep -E "^package:|^minSdkVersion|^targetSdkVersion"
-          $BT/apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -E "Signer #1 certificate (DN|SHA-256)"
+          $BT/apksigner verify --print-certs build/app/outputs/flutter-apk/app-release.apk | grep -iE "certificate (DN|SHA-256)"
           $BT/aapt2 dump permissions build/app/outputs/flutter-apk/app-release.apk | sort
 
       - name: Pruebas Kotlin
