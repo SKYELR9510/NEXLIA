@@ -13,8 +13,25 @@ class Contact {
   final bool hasPhoto;
 }
 
+/// Cuenta telefónica (normalmente una SIM).
+class SimInfo {
+  SimInfo(this.key, this.label, this.number, this.slot);
+  final String key;
+  final String label;
+  final String number;
+  final int slot;
+
+  static SimInfo fromMap(Map m) => SimInfo(
+        (m['key'] ?? '').toString(),
+        (m['label'] ?? '').toString(),
+        (m['number'] ?? '').toString(),
+        (m['slot'] as num?)?.toInt() ?? 0,
+      );
+}
+
 class CallEntry {
-  CallEntry(this.id, this.number, this.name, this.type, this.date, this.duration);
+  CallEntry(this.id, this.number, this.name, this.type, this.date, this.duration,
+      {this.account = ''});
   final int id;
   final String number;
   final String name;
@@ -23,6 +40,9 @@ class CallEntry {
   final int type;
   final DateTime date;
   final int duration;
+
+  /// Cuenta telefónica con la que se hizo o recibió la llamada ('' si el sistema no la informa).
+  final String account;
 
   bool get missed => type == 3 || type == 5 || type == 6;
 }
@@ -87,6 +107,18 @@ class Native {
   static Future<bool> rejectWithMessage(String text) => _bool('rejectWithMessage', {'text': text});
   static Future<bool> sendSms(String number) => _bool('sendSms', {'number': number});
   static Future<bool> openWhatsApp(String number) => _bool('openWhatsApp', {'number': number});
+  static Future<bool> selectPhoneAccount(String key) =>
+      _bool('selectPhoneAccount', {'key': key});
+
+  static Future<List<SimInfo>> getSimAccounts() async {
+    try {
+      final rows = await _ch.invokeMethod<List<dynamic>>('getSimAccounts') ?? [];
+      return rows.map((r) => SimInfo.fromMap(r as Map)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
   static Future<bool> swapCalls() => _bool('swapCalls');
   static Future<bool> mergeCalls() => _bool('mergeCalls');
   static Future<bool> setBluetooth(bool on) => _bool('setBluetooth', {'on': on});
@@ -142,6 +174,7 @@ class Native {
           (m['callType'] as num).toInt(),
           DateTime.fromMillisecondsSinceEpoch((m['date'] as num).toInt()),
           (m['duration'] as num).toInt(),
+          account: (m['account'] ?? '').toString(),
         ));
       }
     } catch (_) {}
@@ -234,13 +267,24 @@ class AppData extends ChangeNotifier {
 
   List<Contact> contacts = [];
   List<CallEntry> calls = [];
+  List<SimInfo> sims = [];
   bool isDefault = true;
 
   Future<void> reload() async {
     isDefault = await Native.isDefaultDialer();
+    sims = await Native.getSimAccounts();
     contacts = await Native.getContacts();
     calls = await Native.getCallLog();
     notifyListeners();
+  }
+
+  /// Etiqueta de la SIM de una llamada. Vacía con una sola SIM, para no cambiar esa vista.
+  String simLabel(String account) {
+    if (sims.length < 2 || account.isEmpty) return '';
+    for (final s in sims) {
+      if (s.key == account) return s.label;
+    }
+    return '';
   }
 
   Contact? contactFor(String number) {
