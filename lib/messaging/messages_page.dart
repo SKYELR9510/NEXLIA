@@ -151,7 +151,7 @@ class _SearchField extends StatelessWidget {
         child: CupertinoTextField(
           placeholder: 'Buscar en mensajes',
           onChanged: onChanged,
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 14),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 16),
           prefix: Padding(
             padding: const EdgeInsets.only(left: 14),
             child: ExcludeSemantics(child: Icon(CupertinoIcons.search, size: 20, color: labelColor(context))),
@@ -406,7 +406,7 @@ class _Banner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final bg = over(tint, 0.12, bgColor(context));
+    final bg = over(tint, bannerTint, bgColor(context));
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),

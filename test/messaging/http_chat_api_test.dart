@@ -121,6 +121,18 @@ void main() {
     await expectLater(a.listConversations(), throwsA(isA<ChatNetworkError>()));
   });
 
+  test('el cliente solo usa rutas definidas en el contrato servidor/chat/openapi.yaml', () {
+    final spec = File('servidor/chat/openapi.yaml').readAsStringSync();
+    for (final path in [
+      '/v1/conversations:',
+      '/v1/conversations/{conversationId}/messages:',
+      '/v1/conversations/{conversationId}/receipts:',
+    ]) {
+      expect(spec.contains('\n  $path'), isTrue, reason: path);
+    }
+    expect(spec.contains('name: Idempotency-Key'), isTrue);
+  });
+
   test('servidor que no responde: tiempo agotado como error de red', () async {
     handler = (r) => Completer<void>().future; // nunca responde
     await expectLater(api(timeout: const Duration(milliseconds: 300)).listConversations(),

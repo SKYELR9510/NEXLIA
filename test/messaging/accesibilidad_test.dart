@@ -131,7 +131,7 @@ void main() {
           containsSemantics(hasToggledState: true, isToggled: true));
       expect(t.getSemantics(find.bySemanticsLabel(RegExp('Conversaciones de prueba'))),
           containsSemantics(hasToggledState: true, isToggled: true));
-      expect(find.bySemanticsLabel(RegExp(r'SIM.*2 ranuras · 1 activa')), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp(r'SIM[\s\S]*2 ranuras · 1 activa')), findsOneWidget);
       h.dispose();
     });
   });
@@ -251,7 +251,11 @@ void main() {
         await t.pumpWidget(app(MessagesPage(chat: chat, sms: sms), b: b, scale: 2));
         await t.pumpAndSettle();
         expect(t.takeException(), isNull);
-        expect(find.text('Mostrar mis SMS aquí'), findsOneWidget);
+        // Con texto al 200 % la tarjeta queda más abajo: se desplaza hasta ella.
+        await t.scrollUntilVisible(find.text('Mostrar mis SMS aquí'), 200);
+        expect(t.takeException(), isNull);
+        await t.scrollUntilVisible(find.text('Ana (prueba)'), 300);
+        expect(t.takeException(), isNull);
 
         await t.pumpWidget(app(ChatConversationPage(chat: chat, conversationId: 'demo-equipo'), b: b, scale: 2));
         await t.pumpAndSettle();

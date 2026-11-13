@@ -135,12 +135,12 @@ jobs:
           expect "tablas chat_* tras 001" "$(n_chat)" 7
           snapshot > tras_001.sql
           run 002_chat_identidad_y_abuso.up.sql
-          expect "tablas chat_* tras 002" "$(n_chat)" 13
+          expect "tablas chat_* tras 002" "$(n_chat)" 12
           run 002_chat_identidad_y_abuso.down.sql
           snapshot > tras_002_bajada.sql
           diff -u tras_001.sql tras_002_bajada.sql && echo "OK   | bajar 002 deja el esquema idéntico al de 001"
           run 002_chat_identidad_y_abuso.up.sql
-          expect "tablas chat_* tras volver a subir 002" "$(n_chat)" 13
+          expect "tablas chat_* tras volver a subir 002" "$(n_chat)" 12
 
           # Restricciones (datos de prueba ficticios).
           q "INSERT INTO chat_users (public_id, phone_e164, display_name) VALUES ('01PRUEBA00000000000000000A','+51900000001','Prueba A'), ('01PRUEBA00000000000000000B','+51900000002','Prueba B')"
@@ -168,6 +168,18 @@ jobs:
           run 001_chat_base.down.sql
           expect "tablas chat_* tras bajar todo" "$(n_chat)" 0
           expect "tablas de spam intactas" "$(n_spam)" 2
+
+      - name: Contrato OpenAPI de NEXLIA Chat
+        run: |
+          python3 -m pip install --quiet "openapi-spec-validator==0.7.1"
+          python3 -m openapi_spec_validator servidor/chat/openapi.yaml
+          python3 - <<'PY'
+          import yaml
+          d = yaml.safe_load(open('servidor/chat/openapi.yaml'))
+          ops = [(m.upper(), p) for p, v in d['paths'].items() for m in v if m in ('get','post','put','patch','delete')]
+          print(f"{len(d['paths'])} rutas, {len(ops)} operaciones")
+          for m, p in ops: print(f"  {m:6} {p}")
+          PY
 
   # Fase 1: capturas de la interfaz de mensajería (datos de prueba). Informativo.
   capturas:

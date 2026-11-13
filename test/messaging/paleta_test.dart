@@ -42,8 +42,8 @@ void main() {
         aa(secondaryColor(ctx), fillColor(ctx), 'texto secundario sobre relleno');
         aa(labelColor(ctx), fillColor(ctx), 'burbuja recibida');
         for (final tint in [accentColor(ctx), smsSolid, failedSolid, demoTint]) {
-          aa(secondaryColor(ctx), over(tint, 0.12, bg), 'texto de aviso sobre tinte $tint');
-          aa(labelColor(ctx), over(tint, 0.12, bg), 'título de aviso sobre tinte $tint');
+          aa(secondaryColor(ctx), over(tint, bannerTint, bg), 'texto de aviso sobre tinte $tint');
+          aa(labelColor(ctx), over(tint, bannerTint, bg), 'título de aviso sobre tinte $tint');
         }
       });
     }

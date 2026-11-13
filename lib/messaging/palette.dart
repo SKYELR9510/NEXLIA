@@ -50,5 +50,8 @@ const demoTint = Color(0xFFFF9500);
 const failedSolid = Color(0xFFC62828);
 Color failedInk(BuildContext c) => isDark(c) ? const Color(0xFFFF6B60) : const Color(0xFFD70015);
 
+/// Opacidad del tinte de los avisos: con 0,08 el texto secundario supera 4,5:1 con todos los acentos.
+const bannerTint = 0.08;
+
 /// Texto sobre fondos sólidos.
 const onSolid = _white;

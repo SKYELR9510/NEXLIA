@@ -1,0 +1,568 @@
+openapi: 3.0.3
+info:
+  title: NEXLIA Chat API
+  version: 1.0.0-borrador
+  description: |
+    Contrato v1 de NEXLIA Chat. **Borrador de diseño: no hay servidor desplegado.**
+    Diseño, validaciones, autorización y antiabuso: docs/CHAT_BACKEND.md.
+    Mensajes por Internet entre usuarios de NEXLIA. Nunca transporta SMS.
+    Sin cifrado de extremo a extremo: el servidor puede leer el texto (protegido con TLS y en reposo).
+servers:
+  - url: https://chat.example.invalid
+    description: Marcador de posición. La URL real se fija al compilar (NEXLIA_CHAT_URL).
+security:
+  - bearer: []
+tags:
+  - name: auth
+  - name: cuenta
+  - name: conversaciones
+  - name: mensajes
+  - name: sincronizacion
+  - name: dispositivos
+  - name: abuso
+
+paths:
+  /v1/auth/otp/request:
+    post:
+      tags: [auth]
+      summary: Pide un código de verificación por SMS (proveedor externo)
+      description: |
+        Responde 202 tanto si el número tiene cuenta como si no (no revela qué números están registrados).
+        Límites: 3 por número cada 15 min, 10 por IP cada hora.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone, purpose]
+              properties:
+                phone: { $ref: '#/components/schemas/Phone' }
+                purpose: { type: string, enum: [login, change_phone] }
+      responses:
+        '202':
+          description: Reto creado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [challengeId, expiresIn, retryAfter]
+                properties:
+                  challengeId: { $ref: '#/components/schemas/Id' }
+                  expiresIn: { type: integer, description: Segundos (300) }
+                  retryAfter: { type: integer, description: Segundos hasta poder pedir otro }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '429': { $ref: '#/components/responses/TooMany' }
+
+  /v1/auth/otp/verify:
+    post:
+      tags: [auth]
+      summary: Verifica el código y abre una sesión en este dispositivo
+      description: Máximo 5 intentos por reto. Crea la cuenta si el número no tenía.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId, code, device]
+              properties:
+                challengeId: { $ref: '#/components/schemas/Id' }
+                code: { type: string, pattern: '^[0-9]{6}$' }
+                device:
+                  type: object
+                  required: [label, platform, appVersion]
+                  properties:
+                    label: { type: string, minLength: 1, maxLength: 80 }
+                    platform: { type: string, enum: [android] }
+                    appVersion: { type: string, maxLength: 20 }
+      responses:
+        '200':
+          description: Sesión abierta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { description: Código incorrecto o reto caducado/agotado }
+        '429': { $ref: '#/components/responses/TooMany' }
+
+  /v1/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Renueva la sesión (el token de renovación rota en cada uso)
+      description: Reutilizar un token ya rotado revoca todas las sesiones de esa familia (posible robo).
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { $ref: '#/components/schemas/Token' }
+      responses:
+        '200':
+          description: Tokens nuevos
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Session' }
+        '401': { description: Token inválido, caducado o reutilizado }
+
+  /v1/auth/logout:
+    post:
+      tags: [auth]
+      summary: Cierra la sesión de este dispositivo
+      responses:
+        '204': { description: Sesión cerrada }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/me:
+    get:
+      tags: [cuenta]
+      summary: Perfil propio
+      responses:
+        '200':
+          description: Perfil
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    patch:
+      tags: [cuenta]
+      summary: Cambia el nombre visible
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [displayName]
+              properties:
+                displayName: { $ref: '#/components/schemas/DisplayName' }
+      responses:
+        '200':
+          description: Perfil actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [cuenta]
+      summary: Borra la cuenta (borrado lógico inmediato; datos personales eliminados según la política de retención)
+      responses:
+        '204': { description: Cuenta borrada y sesiones revocadas }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/me/phone:
+    post:
+      tags: [cuenta]
+      summary: Cambia el número verificado (requiere sesión y un OTP enviado al número nuevo)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [challengeId, code]
+              properties:
+                challengeId: { $ref: '#/components/schemas/Id' }
+                code: { type: string, pattern: '^[0-9]{6}$' }
+      responses:
+        '200':
+          description: Número cambiado; el resto de dispositivos se cierran
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Me' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '409': { description: El número nuevo ya pertenece a otra cuenta }
+
+  /v1/devices:
+    get:
+      tags: [dispositivos]
+      summary: Sesiones abiertas de la cuenta
+      responses:
+        '200':
+          description: Lista de dispositivos
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [devices]
+                properties:
+                  devices:
+                    type: array
+                    items: { $ref: '#/components/schemas/Device' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/devices/{deviceId}:
+    delete:
+      tags: [dispositivos]
+      summary: Cierra la sesión de otro dispositivo propio
+      parameters:
+        - { name: deviceId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+      responses:
+        '204': { description: Revocado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/devices/current/push:
+    put:
+      tags: [dispositivos]
+      summary: Registra o actualiza el token push de este dispositivo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider, token]
+              properties:
+                provider: { type: string, enum: [fcm] }
+                token: { type: string, minLength: 20, maxLength: 512 }
+      responses:
+        '204': { description: Registrado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [dispositivos]
+      summary: Deja de recibir avisos push en este dispositivo
+      responses:
+        '204': { description: Eliminado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/conversations:
+    get:
+      tags: [conversaciones]
+      summary: Conversaciones del usuario (solo aquellas de las que es miembro)
+      parameters:
+        - { name: cursor, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: Página de conversaciones
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [conversations]
+                properties:
+                  conversations:
+                    type: array
+                    items: { $ref: '#/components/schemas/Conversation' }
+                  nextCursor: { type: string, nullable: true }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [conversaciones]
+      summary: Abre (o devuelve) la conversación directa con otro usuario
+      description: |
+        El usuario escribe el número de la otra persona; no se sube la agenda.
+        Si ya existe la conversación del par, responde 200 con ella (idempotente).
+        Responde 404 tanto si el número no tiene cuenta como si la otra persona bloqueó al usuario.
+        Límite: 20 conversaciones nuevas al día (5 si la cuenta tiene menos de 24 h).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [peerPhone]
+              properties:
+                peerPhone: { $ref: '#/components/schemas/Phone' }
+      responses:
+        '200':
+          description: Ya existía
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+        '201':
+          description: Creada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Conversation' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooMany' }
+
+  /v1/conversations/{conversationId}/messages:
+    parameters:
+      - { name: conversationId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+    get:
+      tags: [mensajes]
+      summary: Historial paginado (más recientes primero con before; posteriores con after)
+      parameters:
+        - { name: before, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: after, in: query, schema: { $ref: '#/components/schemas/Id' } }
+        - { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 50 } }
+      responses:
+        '200':
+          description: Mensajes
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [messages]
+                properties:
+                  messages:
+                    type: array
+                    items: { $ref: '#/components/schemas/Message' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [mensajes]
+      summary: Envía un mensaje (idempotente por clientId)
+      description: |
+        Si el mismo remitente repite clientId, responde 200 con el mensaje ya guardado (no se duplica).
+        Límite: 30 mensajes por minuto y usuario. 403 si la otra persona lo bloqueó.
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { $ref: '#/components/schemas/ClientId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clientId, text]
+              properties:
+                clientId: { $ref: '#/components/schemas/ClientId' }
+                text: { $ref: '#/components/schemas/MessageText' }
+      responses:
+        '200':
+          description: Repetición del mismo clientId
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '201':
+          description: Guardado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MessageEnvelope' }
+        '400': { $ref: '#/components/responses/Invalid' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: No permitido (bloqueado o cuenta limitada) }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '422': { description: clientId distinto del Idempotency-Key o texto inválido }
+        '429': { $ref: '#/components/responses/TooMany' }
+
+  /v1/conversations/{conversationId}/receipts:
+    post:
+      tags: [mensajes]
+      summary: Marca entregado o leído hasta un mensaje (cursor por miembro)
+      parameters:
+        - { name: conversationId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [upToMessageId, kind]
+              properties:
+                upToMessageId: { $ref: '#/components/schemas/Id' }
+                kind: { type: string, enum: [delivered, read] }
+      responses:
+        '204': { description: Actualizado (nunca retrocede) }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /v1/sync:
+    get:
+      tags: [sincronizacion]
+      summary: Cambios desde un cursor (long-polling de hasta 25 s, compatible con hosting PHP)
+      parameters:
+        - { name: since, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: wait, in: query, schema: { type: integer, minimum: 0, maximum: 25, default: 0 } }
+      responses:
+        '200':
+          description: Cambios (puede venir vacío si se agotó la espera)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [cursor, messages, receipts, conversations]
+                properties:
+                  cursor: { type: string }
+                  messages:
+                    type: array
+                    items: { $ref: '#/components/schemas/Message' }
+                  receipts:
+                    type: array
+                    items: { $ref: '#/components/schemas/Receipt' }
+                  conversations:
+                    type: array
+                    items: { $ref: '#/components/schemas/Conversation' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '410': { description: Cursor demasiado antiguo; hay que recargar las conversaciones }
+
+  /v1/blocks/{userId}:
+    parameters:
+      - { name: userId, in: path, required: true, schema: { $ref: '#/components/schemas/Id' } }
+    put:
+      tags: [abuso]
+      summary: Bloquea a un usuario (deja de poder escribir y abrir conversaciones)
+      responses:
+        '204': { description: Bloqueado }
+        '400': { description: No se puede bloquear a uno mismo }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    delete:
+      tags: [abuso]
+      summary: Desbloquea
+      responses:
+        '204': { description: Desbloqueado }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /v1/reports:
+    post:
+      tags: [abuso]
+      summary: Reporta a un usuario o un mensaje (solo de conversaciones de las que se es miembro)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [userId, reason]
+              properties:
+                userId: { $ref: '#/components/schemas/Id' }
+                messageId: { $ref: '#/components/schemas/Id' }
+                reason: { type: string, enum: [spam, fraud, harassment, other] }
+                block: { type: boolean, default: true }
+      responses:
+        '202': { description: Recibido }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '429': { $ref: '#/components/responses/TooMany' }
+
+components:
+  securitySchemes:
+    bearer:
+      type: http
+      scheme: bearer
+      description: Token de acceso opaco (256 bits), caduca en 1 h. El servidor guarda solo su SHA-256.
+  responses:
+    Invalid:
+      description: Datos inválidos
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Unauthorized:
+      description: Sin sesión o sesión caducada (el cliente renueva con /v1/auth/refresh)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: No existe o no es miembro (no se distingue, para no revelar datos)
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    TooMany:
+      description: Límite de frecuencia; ver cabecera Retry-After
+      headers:
+        Retry-After:
+          schema: { type: integer }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+  schemas:
+    Id:
+      type: string
+      description: Identificador público opaco (ULID). Nunca el id interno de la base de datos.
+      pattern: '^[0-9A-HJKMNP-TV-Z]{26}$'
+    Phone:
+      type: string
+      description: E.164
+      pattern: '^\+[1-9][0-9]{7,14}$'
+    Token:
+      type: string
+      description: 43 caracteres base64url (256 bits)
+      pattern: '^[A-Za-z0-9_-]{43}$'
+    ClientId:
+      type: string
+      pattern: '^[A-Za-z0-9_-]{8,64}$'
+    DisplayName:
+      type: string
+      minLength: 1
+      maxLength: 40
+    MessageText:
+      type: string
+      minLength: 1
+      maxLength: 4000
+      description: UTF-8. Se recorta en los extremos; no se admiten caracteres de control salvo salto de línea.
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string, description: Código estable, p. ej. invalid_phone, rate_limited }
+        message: { type: string }
+    Session:
+      type: object
+      required: [accessToken, refreshToken, expiresIn, user]
+      properties:
+        accessToken: { $ref: '#/components/schemas/Token' }
+        refreshToken: { $ref: '#/components/schemas/Token' }
+        expiresIn: { type: integer, description: Segundos (3600) }
+        user: { $ref: '#/components/schemas/Me' }
+    Me:
+      type: object
+      required: [id, displayName, phone, isNew]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        displayName: { type: string }
+        phone: { $ref: '#/components/schemas/Phone' }
+        isNew: { type: boolean }
+    User:
+      type: object
+      required: [id, displayName]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        displayName: { type: string }
+    Device:
+      type: object
+      required: [id, label, platform, current, lastSeenAt]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        label: { type: string }
+        platform: { type: string, enum: [android] }
+        current: { type: boolean }
+        lastSeenAt: { type: string, format: date-time }
+    Conversation:
+      type: object
+      required: [id, peer, updatedAt, unreadCount]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        peer: { $ref: '#/components/schemas/User' }
+        updatedAt: { type: string, format: date-time }
+        unreadCount: { type: integer, minimum: 0 }
+    Message:
+      type: object
+      required: [id, clientId, conversationId, senderId, text, createdAt, status]
+      properties:
+        id: { $ref: '#/components/schemas/Id' }
+        clientId: { $ref: '#/components/schemas/ClientId' }
+        conversationId: { $ref: '#/components/schemas/Id' }
+        senderId: { $ref: '#/components/schemas/Id' }
+        text: { type: string }
+        createdAt: { type: string, format: date-time }
+        status:
+          type: string
+          enum: [sent, delivered, read]
+          description: Para mensajes propios, el estado según los cursores del otro miembro.
+    MessageEnvelope:
+      type: object
+      required: [message]
+      properties:
+        message: { $ref: '#/components/schemas/Message' }
+    Receipt:
+      type: object
+      required: [conversationId, userId, kind, upToMessageId]
+      properties:
+        conversationId: { $ref: '#/components/schemas/Id' }
+        userId: { $ref: '#/components/schemas/Id' }
+        kind: { type: string, enum: [delivered, read] }
+        upToMessageId: { $ref: '#/components/schemas/Id' }
