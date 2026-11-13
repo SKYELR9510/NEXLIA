@@ -78,7 +78,19 @@ class Native {
   static Future<bool> isDefaultDialer() => _bool('isDefaultDialer');
   static Future<bool> requestDefaultDialer() => _bool('requestDefaultDialer');
   static Future<bool> requestPermissions() => _bool('requestPermissions');
-  static Future<bool> placeCall(String number) => _bool('placeCall', {'number': number});
+  /// Inicia la llamada. Con [account] se fuerza esa SIM (EXTRA_PHONE_ACCOUNT_HANDLE);
+  /// sin ella se llama exactamente como antes. Devuelve 'ok', 'sim_unavailable' o 'error'.
+  static Future<String> placeCall(String number, {String account = ''}) async {
+    try {
+      final ok = await _ch.invokeMethod<bool>(
+          'placeCall', {'number': number, if (account.isNotEmpty) 'account': account});
+      return ok == true ? 'ok' : 'error';
+    } on PlatformException catch (e) {
+      return e.code == 'sim_unavailable' ? 'sim_unavailable' : 'error';
+    } catch (_) {
+      return 'error';
+    }
+  }
   static Future<bool> deleteCallLog(int id) => _bool('deleteCallLog', {'id': id});
   static Future<bool> addContact(String name, String number) =>
       _bool('addContact', {'name': name, 'number': number});

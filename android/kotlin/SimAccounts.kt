@@ -22,6 +22,14 @@ object CallStates {
         Call.STATE_HOLDING -> "holding"
         else -> "disconnected"
     }
+
+    /**
+     * Estado que ve la pantalla. Si NEXLIA ya eligió la SIM para esta llamada
+     * (selector previo o sugerencia automática), el paso breve por
+     * SELECT_PHONE_ACCOUNT se muestra como "dialing": así nunca aparecen dos selectores.
+     */
+    fun visibleName(state: Int, alreadySelected: Boolean): String =
+        if (state == Call.STATE_SELECT_PHONE_ACCOUNT && alreadySelected) "dialing" else name(state)
 }
 
 /**
@@ -59,6 +67,10 @@ object SimAccounts {
             )
         }
     }
+
+    /** [wanted] si sigue entre las cuentas disponibles; si no (SIM retirada o desactivada), null. */
+    fun resolve(available: List<String>, wanted: String): String? =
+        if (wanted.isNotEmpty() && wanted in available) wanted else null
 
     fun handleFor(ctx: Context, key: String): PhoneAccountHandle? {
         val tm = ctx.getSystemService(TelecomManager::class.java) ?: return null

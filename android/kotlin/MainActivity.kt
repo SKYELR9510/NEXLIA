@@ -141,9 +141,23 @@ class MainActivity : FlutterActivity() {
             }
             "placeCall" -> {
                 val number = call.argument<String>("number") ?: ""
+                val account = call.argument<String>("account").orEmpty()
                 if (number.isEmpty() || !has(Manifest.permission.CALL_PHONE)) result.success(false)
                 else {
-                    getSystemService(TelecomManager::class.java).placeCall(Uri.fromParts("tel", number, null), Bundle())
+                    val extras = Bundle()
+                    if (account.isNotEmpty()) {
+                        // SIM elegida en NEXLIA antes de llamar. Si ya no existe (retirada o
+                        // desactivada), no se usa una cuenta inválida: Flutter vuelve a preguntar.
+                        val handle = SimAccounts.handleFor(this, account)
+                        if (handle == null) {
+                            result.error("sim_unavailable", "La SIM elegida ya no está disponible", null)
+                            return
+                        }
+                        extras.putParcelable(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, handle)
+                        CallManager.preselect(handle)
+                    }
+                    // Sin "account" (una sola SIM): Bundle vacío, exactamente como antes.
+                    getSystemService(TelecomManager::class.java).placeCall(Uri.fromParts("tel", number, null), extras)
                     result.success(true)
                 }
             }
