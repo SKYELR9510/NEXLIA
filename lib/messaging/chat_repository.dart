@@ -3,33 +3,11 @@ import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 
-import '../native.dart';
 import 'chat_api.dart';
 import 'models.dart';
+import 'store.dart';
 
-/// Almacenamiento clave-valor. Chat guarda solo en su propia clave: nunca SMS.
-abstract class KeyValueStore {
-  Future<String?> read(String key);
-  Future<void> write(String key, String value);
-}
-
-/// Preferencias nativas de la app (las mismas que usa el resto de NEXLIA).
-class NativePrefsStore implements KeyValueStore {
-  const NativePrefsStore();
-  @override
-  Future<String?> read(String key) => Native.getPref(key);
-  @override
-  Future<void> write(String key, String value) => Native.setPref(key, value);
-}
-
-/// En memoria (pruebas).
-class MemoryStore implements KeyValueStore {
-  final Map<String, String> data = {};
-  @override
-  Future<String?> read(String key) async => data[key];
-  @override
-  Future<void> write(String key, String value) async => data[key] = value;
-}
+export 'store.dart';
 
 String _randomId() {
   final r = Random.secure();

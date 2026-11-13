@@ -108,7 +108,7 @@ void main() {
             box: SmsBox.inbox,
             subId: 2),
       ];
-    final sms = SmsRepository(src);
+    final sms = SmsRepository(src, store: consented());
     await sms.load();
     return (chat, sms);
   }

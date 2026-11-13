@@ -41,31 +41,20 @@ class MessagingSettingsPage extends StatelessWidget {
               _footer(context,
                   'NEXLIA Chat todavía no tiene servidor ni cuentas de usuario. No se envía nada por Internet hasta que existan.'),
               _section(context, 'SMS', [
-                _info(context, 'Lectura de SMS', switch (sms.permission) {
-                  SmsPermission.granted => 'Permitida',
+                _toggle(context, 'Mostrar mis SMS en NEXLIA', sms.consent,
+                    (on) => on ? sms.requestAccess() : sms.revoke()),
+                _info(context, 'Permiso de Android', switch (sms.permission) {
+                  SmsPermission.granted => 'Concedido',
                   SmsPermission.denied => 'Sin permiso',
                   SmsPermission.unavailable => 'No disponible',
                 }),
                 _info(context, 'Enviar SMS', 'Desde la app de SMS del teléfono'),
               ]),
               _footer(context,
-                  'NEXLIA solo muestra tus SMS; no los copia a ningún servidor, no los analiza y no envía SMS por su cuenta.'),
+                  'NEXLIA solo muestra tus SMS si lo activas; no los copia a ningún servidor, no los analiza y no envía SMS por su cuenta. '
+                  'Al desactivarlo deja de leerlos; el permiso de Android se quita en Ajustes > Apps > NEXLIA > Permisos.'),
               _section(context, 'PRUEBAS', [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text('Conversaciones de prueba',
-                            style: TextStyle(fontSize: 16, color: labelColor(context))),
-                      ),
-                      CupertinoSwitch(
-                        value: chat.hasDemo,
-                        onChanged: (on) => chat.setDemo(on),
-                      ),
-                    ],
-                  ),
-                ),
+                _toggle(context, 'Conversaciones de prueba', chat.hasDemo, (on) => chat.setDemo(on)),
               ]),
               _footer(context,
                   'Muestra conversaciones de Chat inventadas, marcadas PRUEBA, para ver cómo se verá la bandeja. No se envían a nadie.'),
@@ -95,6 +84,18 @@ class MessagingSettingsPage extends StatelessWidget {
           ]),
         ),
       ],
+    );
+  }
+
+  Widget _toggle(BuildContext context, String label, bool value, ValueChanged<bool> onChanged) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          Expanded(child: Text(label, style: TextStyle(fontSize: 16, color: labelColor(context)))),
+          CupertinoSwitch(value: value, onChanged: onChanged),
+        ],
+      ),
     );
   }
 

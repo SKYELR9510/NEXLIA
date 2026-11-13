@@ -8,5 +8,5 @@ class Messaging {
 
   static final ChatRepository chat =
       ChatRepository(store: const NativePrefsStore(), api: ChatConfig.api());
-  static final SmsRepository sms = SmsRepository(const NativeSmsSource());
+  static final SmsRepository sms = SmsRepository(const NativeSmsSource(), store: const NativePrefsStore());
 }

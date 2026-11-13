@@ -76,7 +76,7 @@ class _MessagesPageState extends State<MessagesPage> {
     final items = buildInbox(all, filter, query);
     final showChat = filter != InboxFilter.sms;
     final showSms = filter != InboxFilter.chat;
-    final smsBlocked = widget.sms.loaded && widget.sms.permission != SmsPermission.granted;
+    final smsBlocked = widget.sms.loaded && !widget.sms.canRead;
     final unread = unreadTotal(all);
 
     return ListView(
@@ -109,6 +109,7 @@ class _MessagesPageState extends State<MessagesPage> {
         if (showSms && smsBlocked)
           _SmsPermissionCard(
             unavailable: widget.sms.permission == SmsPermission.unavailable,
+            alreadyGranted: widget.sms.permission == SmsPermission.granted,
             busy: asking,
             onAllow: _allowSms,
           ),
@@ -392,8 +393,12 @@ class _ChatStatusBanner extends StatelessWidget {
 }
 
 class _SmsPermissionCard extends StatelessWidget {
-  const _SmsPermissionCard({required this.unavailable, required this.busy, required this.onAllow});
+  const _SmsPermissionCard(
+      {required this.unavailable, required this.alreadyGranted, required this.busy, required this.onAllow});
   final bool unavailable;
+
+  /// Android ya dio READ_SMS (por ejemplo, por ser la app de Teléfono): falta el consentimiento en NEXLIA.
+  final bool alreadyGranted;
   final bool busy;
   final VoidCallback onAllow;
 
@@ -411,16 +416,18 @@ class _SmsPermissionCard extends StatelessWidget {
       icon: CupertinoIcons.lock_shield,
       color: smsColor,
       title: 'Ver tus SMS en NEXLIA',
-      text: 'NEXLIA necesita permiso para leer los SMS del teléfono. Solo se leen para mostrarlos aquí: '
-          'no se copian a ningún servidor, no se analizan y NEXLIA no envía SMS por su cuenta.',
+      text: (alreadyGranted
+              ? 'Android ya permite a NEXLIA leer SMS por ser tu app de Teléfono, pero no se mostrarán hasta que lo confirmes. '
+              : 'NEXLIA necesita permiso para leer los SMS del teléfono. ') +
+          'Solo se leen para mostrarlos aquí: no se copian a ningún servidor, no se analizan y NEXLIA no envía SMS por su cuenta.',
       action: CupertinoButton(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         minimumSize: Size.zero,
         color: smsColor,
         borderRadius: BorderRadius.circular(18),
         onPressed: busy ? null : onAllow,
-        child: const Text('Permitir lectura de SMS',
-            style: TextStyle(color: Color(0xFFFFFFFF), fontSize: 14, fontWeight: FontWeight.w700)),
+        child: Text(alreadyGranted ? 'Mostrar mis SMS aquí' : 'Permitir lectura de SMS',
+            style: const TextStyle(color: Color(0xFFFFFFFF), fontSize: 14, fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -448,7 +455,7 @@ class _EmptyState extends StatelessWidget {
     } else if (filter == InboxFilter.sms) {
       icon = CupertinoIcons.chat_bubble_2;
       title = smsBlocked ? 'SMS sin permiso' : 'Sin SMS';
-      text = smsBlocked ? 'Permite la lectura de SMS para verlos aquí.' : 'No hay SMS en este teléfono.';
+      text = smsBlocked ? 'Confirma la lectura de SMS para verlos aquí.' : 'No hay SMS en este teléfono.';
     } else {
       icon = CupertinoIcons.chat_bubble_2;
       title = 'Aún no hay mensajes';

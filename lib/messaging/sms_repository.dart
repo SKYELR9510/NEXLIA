@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../native.dart';
 import 'models.dart';
+import 'store.dart';
 
 /// Origen de SMS: el proveedor de Android. NEXLIA solo lee.
 abstract class SmsSource {
@@ -31,20 +32,32 @@ class NativeSmsSource implements SmsSource {
   Future<bool> openComposer(String address) => Native.sendSms(address);
 }
 
-/// Bandeja SMS de solo lectura. No guarda nada: el teléfono es la fuente de verdad.
+/// Bandeja SMS de solo lectura. No guarda SMS: el teléfono es la fuente de verdad.
+///
+/// Leer exige dos cosas: el permiso READ_SMS de Android y el consentimiento dado
+/// dentro de NEXLIA. El permiso solo no basta: Android lo concede automáticamente
+/// a la app de Teléfono predeterminada (rol DIALER), sin que el usuario lo pida.
 class SmsRepository extends ChangeNotifier {
-  SmsRepository(this.source);
+  SmsRepository(this.source, {KeyValueStore? store}) : store = store ?? MemoryStore();
+
+  /// Única clave que guarda este repositorio: "1" si el usuario aceptó ver sus SMS.
+  static const consentKey = 'sms.consent.v1';
 
   final SmsSource source;
+  final KeyValueStore store;
   SmsPermission permission = SmsPermission.unavailable;
+  bool consent = false;
   List<SmsThread> threads = const [];
   List<SimSubscription> subscriptions = const [];
   bool loaded = false;
 
-  /// Sin permiso no se llama a la lectura de SMS.
+  /// Solo se leen SMS con permiso de Android y consentimiento en la app.
+  bool get canRead => consent && permission == SmsPermission.granted;
+
   Future<void> load() async {
     permission = await source.permission();
-    if (permission == SmsPermission.granted) {
+    consent = await store.read(consentKey) == '1';
+    if (canRead) {
       subscriptions = await source.subscriptions();
       threads = await source.threads();
     } else {
@@ -54,15 +67,25 @@ class SmsRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Solo desde el botón "Permitir lectura de SMS".
+  /// Solo desde el botón de la tarjeta de SMS o el interruptor de Más > Mensajes.
+  /// Registra el consentimiento y, si Android aún no dio el permiso, lo pide.
   Future<bool> requestAccess() async {
-    final ok = await source.requestPermission();
+    await store.write(consentKey, '1');
+    if (await source.permission() != SmsPermission.granted) {
+      await source.requestPermission();
+    }
     await load();
-    return ok && permission == SmsPermission.granted;
+    return canRead;
+  }
+
+  /// Deja de mostrar SMS en NEXLIA (el permiso de Android se quita en Ajustes).
+  Future<void> revoke() async {
+    await store.write(consentKey, '0');
+    await load();
   }
 
   Future<List<SmsMessage>> messagesOf(String threadId) async {
-    if (permission != SmsPermission.granted) return const [];
+    if (!canRead) return const [];
     return source.messages(threadId);
   }
 

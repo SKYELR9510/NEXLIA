@@ -1,5 +1,6 @@
 // Dobles de prueba de mensajería. Todos los datos son ficticios.
 import 'package:phone/messaging/chat_api.dart';
+import 'package:phone/messaging/chat_repository.dart';
 import 'package:phone/messaging/models.dart';
 import 'package:phone/messaging/sms_repository.dart';
 
@@ -39,6 +40,9 @@ class FakeChatApi implements ChatApi {
     receipts.add('$conversationId:$upToMessageId:$kind');
   }
 }
+
+/// Almacén con el consentimiento de SMS ya dado en la app.
+MemoryStore consented() => MemoryStore()..data[SmsRepository.consentKey] = '1';
 
 class FakeSmsSource implements SmsSource {
   FakeSmsSource({this.perm = SmsPermission.denied, this.grantOnRequest = true});

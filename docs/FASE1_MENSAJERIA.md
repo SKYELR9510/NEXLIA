@@ -114,7 +114,7 @@ Errores (los traduce `HttpChatApi`):
 
 - **Local primero:** escribir un mensaje lo guarda al instante como `pending`, con un `clientId` único, y lo pinta con un reloj.
 - **Cola de pendientes:** `flushOutbox()` envía los pendientes en orden de creación, con `Idempotency-Key = clientId`. Si un envío se repite, el servidor devuelve el mismo mensaje y no se duplica.
-- **Reintentos:** ante un error de red o 5xx se detiene la cola (no se adelantan mensajes) y queda `attempts+1`. Se reintenta al reabrir la app, al entrar a la conversación o al tocar "Reintentar". Sin servidor configurado, la cola no intenta nada y lo dice en la interfaz.
+- **Reintentos:** ante un error de red o 5xx se detiene la cola (no se adelantan mensajes) y queda `attempts+1`. Se reintenta al abrir la pestaña Mensajes por primera vez en la sesión, al enviar otro mensaje o al tocar "Reintentar" en un mensaje fallido. Sin servidor configurado, la cola no intenta nada y lo dice en la interfaz.
 - **Persistencia:** la conversación, los mensajes y la cola se guardan tras cada cambio y se restauran al abrir la app.
 - **Recibos:** al abrir una conversación se ponen a 0 los no leídos y, con servidor, se envía `read` hasta el último mensaje.
 - **Tiempo real:** fuera de esta fase. Opciones a evaluar: WebSocket o *long-polling* compatibles con el hosting PHP. Las notificaciones push solo avisarán; no serán la fuente de los mensajes.
@@ -124,9 +124,9 @@ Errores (los traduce `HttpChatApi`):
 
 | Requisito | Fase 1 |
 |---|---|
-| Cifrado de extremo a extremo | **No implementado y no se anuncia.** La interfaz no menciona cifrado |
+| Cifrado de extremo a extremo | **No implementado y no se anuncia.** Más > Mensajes lo muestra como "No disponible todavía" |
 | Contraseñas y secretos en el cliente | Ninguno. `TokenProvider` devuelve `null` porque no hay sesiones. El futuro token de sesión deberá guardarse en almacenamiento seguro (Keystore), no en preferencias |
-| Leer SMS | Solo tras aceptar el permiso `READ_SMS` en la pestaña SMS, después de explicar para qué sirve. Sin permiso no se llama a la lectura |
+| Leer SMS | Hacen falta **dos** condiciones: el permiso `READ_SMS` de Android **y** el consentimiento dado en NEXLIA (botón de la tarjeta de SMS en la pestaña Mensajes, o el interruptor de Más > Mensajes), guardado en `sms.consent.v1`. El permiso solo no basta: la validación en emulador mostró que Android concede `READ_SMS` automáticamente a la app de Teléfono predeterminada (`GRANTED_BY_ROLE`). Sin las dos condiciones no se llama a la lectura. Se puede desactivar en Más > Mensajes |
 | Leer contactos | Se reutilizan los nombres ya cargados por la app (permiso existente); nada se envía a un servidor |
 | Enviar mensajes | Siempre por acción del usuario. Sin envíos automáticos. Sin paso de Chat a SMS |
 | IA | No se analiza ninguna conversación |
@@ -154,7 +154,7 @@ Errores (los traduce `HttpChatApi`):
 
 | Cambio | Justificación |
 |---|---|
-| `READ_SMS` (nuevo) | Bandeja SMS de solo lectura. Se pide en contexto; sin él la pestaña SMS lo explica y no lee nada |
+| `READ_SMS` (nuevo) | Bandeja SMS de solo lectura. Se pide en contexto si falta. Al ser NEXLIA la app de Teléfono predeterminada, Android lo concede con el rol (verificado en API 29 y 34); por eso la lectura además exige el consentimiento dentro de la app (§7) |
 | Rol SMS predeterminado | **No se solicita.** Exige `SMS_DELIVER`, `WAP_PUSH_DELIVER`, `RESPOND_VIA_MESSAGE` y escribir cada SMS recibido; pedirlo sin implementarlo completo rompería la recepción de SMS y "Responder con mensaje" (auditoría P0, §5) |
 | `SEND_SMS`, `RECEIVE_SMS`, `RECEIVE_MMS` | No se añaden en esta fase |
 
@@ -162,9 +162,11 @@ Política de Google Play: `READ_SMS` está restringido a apps de SMS predetermin
 
 ## 10. Interfaz
 
-- **Pestaña Mensajes (índice 3):** título, buscador, filtros **Todos · NEXLIA Chat · SMS**, aviso de estado de Chat y lista de conversaciones.
-- **Fila:** avatar, nombre, insignia de canal (Chat: degradado de marca; SMS: contorno con la SIM si hay dos), fragmento, hora, contador de no leídos y reloj si hay pendientes.
-- **Conversación de Chat:** burbujas, estado por mensaje (reloj, ✓, ✓✓, ✓✓ en color de acento, "No enviado · Reintentar") y redacción.
-- **Hilo SMS:** solo lectura, SIM por mensaje y botón "Responder en la app de SMS".
+- **Pestaña Mensajes (índice 3):** título con el total de no leídos, buscador, filtros **Todos · NEXLIA Chat · SMS**, aviso del estado real de Chat, tarjeta de permiso SMS y lista de conversaciones.
+- **Fila:** avatar con un distintivo de canal, nombre, hora, fragmento, contador de no leídos, reloj si hay pendientes, aviso rojo si hay un mensaje no enviado, y etiquetas **Chat** (color de marca) o **SMS** (verde), **PRUEBA** y la SIM cuando hay dos.
+- **Conversación de Chat:** burbujas, estado de cada mensaje propio con icono y texto (Pendiente, Enviado, Entregado, Leído, No enviado), botón "Reintentar" en los fallidos reales y caja de redacción. Encima, un aviso si la conversación es de prueba, si no hay servidor o si no hay conexión.
+- **Hilo SMS:** solo lectura, SIM por mensaje, estado de bandeja (borrador, en cola, no enviado) y botón "Responder en la app de SMS". No hay caja de redacción.
+- **Más > Mensajes:** estado de cada canal (servidor, conexión, cifrado "No disponible todavía", permiso SMS) e interruptor de conversaciones de prueba.
+- **Más > Buzón de voz:** la misma pantalla que antes estaba en la pestaña 3.
 - **Estados vacíos** por filtro, permiso SMS denegado, Chat sin servidor y búsqueda sin resultados.
-- Tema claro y oscuro con los tokens existentes; objetivos táctiles de 44 px como mínimo; textos con etiquetas de accesibilidad.
+- Tema claro y oscuro con los tokens existentes. Cada fila y cada mensaje tiene una etiqueta de accesibilidad con canal, estado, no leídos y SIM.

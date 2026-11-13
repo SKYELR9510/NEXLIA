@@ -21,7 +21,7 @@ void main() {
   final now = DateTime.now();
 
   Future<(ChatRepository, SmsRepository, FakeSmsSource)> repos(
-      {bool demo = false, SmsPermission perm = SmsPermission.denied, bool smsData = false}) async {
+      {bool demo = false, SmsPermission perm = SmsPermission.denied, bool smsData = false, bool? consent}) async {
     final chat = ChatRepository(store: MemoryStore(), api: const UnconfiguredChatApi());
     await chat.load();
     if (demo) await chat.setDemo(true);
@@ -35,7 +35,8 @@ void main() {
         SmsMessage(id: '2', threadId: '1', address: '+51900000001', body: 'Gracias', date: now, box: SmsBox.sent),
       ];
     }
-    return (chat, SmsRepository(src), src);
+    final store = (consent ?? perm == SmsPermission.granted) ? consented() : MemoryStore();
+    return (chat, SmsRepository(src, store: store), src);
   }
 
   testWidgets('bandeja vacía: estado vacío, aviso de Chat sin servidor y tarjeta de permiso SMS', (t) async {
@@ -74,6 +75,19 @@ void main() {
     expect(src.requests, 1);
     expect(find.text('Tu código de prueba es 0000'), findsOneWidget);
     expect(find.text('Permitir lectura de SMS'), findsNothing);
+  });
+
+  testWidgets('permiso dado por el rol de Teléfono: no muestra SMS hasta confirmar en la app', (t) async {
+    final (chat, sms, src) = await repos(perm: SmsPermission.granted, smsData: true, consent: false);
+    await t.pumpWidget(app(MessagesPage(chat: chat, sms: sms)));
+    await t.pumpAndSettle();
+    expect(find.text('Tu código de prueba es 0000'), findsNothing);
+    expect(src.reads, 0);
+    expect(find.textContaining('Android ya permite a NEXLIA leer SMS'), findsOneWidget);
+    await t.tap(find.text('Mostrar mis SMS aquí'));
+    await t.pumpAndSettle();
+    expect(src.requests, 0, reason: 'el permiso ya estaba: no se vuelve a pedir');
+    expect(find.text('Tu código de prueba es 0000'), findsOneWidget);
   });
 
   testWidgets('bandeja con ambos canales: insignias, PRUEBA, no leídos y filtros', (t) async {

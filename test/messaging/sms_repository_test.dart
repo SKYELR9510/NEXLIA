@@ -24,13 +24,58 @@ void main() {
     expect(src.reads, 0);
   });
 
-  test('el usuario concede el permiso: se leen los hilos', () async {
+  test('el usuario concede el permiso: se guarda el consentimiento y se leen los hilos', () async {
     final src = FakeSmsSource(perm: SmsPermission.denied)
       ..data = [SmsThread(threadId: '1', address: '+51900000001', snippet: 'x', date: DateTime(2026))];
-    final r = SmsRepository(src);
+    final store = MemoryStore();
+    final r = SmsRepository(src, store: store);
     await r.load();
     expect(await r.requestAccess(), isTrue);
+    expect(src.requests, 1);
     expect(r.threads.length, 1);
+    expect(store.data[SmsRepository.consentKey], '1');
+  });
+
+  test('permiso dado por el rol de Teléfono sin consentimiento en la app: no se lee nada', () async {
+    final src = FakeSmsSource(perm: SmsPermission.granted)
+      ..data = [SmsThread(threadId: '1', address: '+51900000001', snippet: 'x', date: DateTime(2026))];
+    final r = SmsRepository(src, store: MemoryStore());
+    await r.load();
+    expect(r.canRead, isFalse);
+    expect(r.threads, isEmpty);
+    expect(await r.messagesOf('1'), isEmpty);
+    expect(src.reads, 0);
+  });
+
+  test('con el permiso ya concedido, confirmar en la app no vuelve a pedirlo', () async {
+    final src = FakeSmsSource(perm: SmsPermission.granted)
+      ..data = [SmsThread(threadId: '1', address: '+51900000001', snippet: 'x', date: DateTime(2026))];
+    final r = SmsRepository(src, store: MemoryStore());
+    expect(await r.requestAccess(), isTrue);
+    expect(src.requests, 0);
+    expect(r.threads.length, 1);
+  });
+
+  test('desactivar: deja de leer y lo recuerda', () async {
+    final src = FakeSmsSource(perm: SmsPermission.granted)
+      ..data = [SmsThread(threadId: '1', address: '+51900000001', snippet: 'x', date: DateTime(2026))];
+    final store = consented();
+    final r = SmsRepository(src, store: store);
+    await r.load();
+    expect(r.threads.length, 1);
+    await r.revoke();
+    expect(r.threads, isEmpty);
+    final again = SmsRepository(src, store: store);
+    await again.load();
+    expect(again.canRead, isFalse);
+  });
+
+  test('consentimiento sin permiso de Android (quitado en Ajustes): no se lee', () async {
+    final src = FakeSmsSource(perm: SmsPermission.denied);
+    final r = SmsRepository(src, store: consented());
+    await r.load();
+    expect(r.canRead, isFalse);
+    expect(src.reads, 0);
   });
 
   test('el usuario lo deniega: sigue sin leer', () async {
@@ -49,7 +94,7 @@ void main() {
 
   test('etiqueta de SIM: vacía con una sola SIM', () async {
     final src = FakeSmsSource(perm: SmsPermission.granted)..sims = [const SimSubscription(1, 'Movistar', 1)];
-    final r = SmsRepository(src);
+    final r = SmsRepository(src, store: consented());
     await r.load();
     expect(r.simLabel(1), '');
   });
