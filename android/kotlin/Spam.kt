@@ -15,6 +15,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.net.URLEncoder
 import java.util.UUID
+import java.util.concurrent.ConcurrentHashMap
 
 /** Ajustes, lista negra y registro del bloqueador, guardados en el teléfono. */
 object SpamStore {
@@ -66,11 +67,14 @@ data class Decision(val action: Int, val reason: String)
 
 /** Reglas del bloqueador. Se evalúan en este orden y gana la primera que coincide. */
 object SpamEngine {
-    /** Motivo de la última decisión por número, para mostrarlo en la pantalla de llamada. */
-    val lastReasons = HashMap<String, String>()
+    /**
+     * Motivo de la última decisión por número, para mostrarlo en la pantalla de llamada.
+     * Lo escriben hilos de fondo y lo lee el hilo principal: mapa concurrente.
+     */
+    val lastReasons = ConcurrentHashMap<String, String>()
 
-    /** Momento en que el filtro del sistema ya evaluó cada número (para no evaluar dos veces). */
-    val screenedAt = HashMap<String, Long>()
+    /** Números que el filtro del sistema ya evaluó (para no evaluar dos veces). */
+    val screened = ScreenedRegistry()
 
     /** Número en formato nacional peruano: solo dígitos, sin +51. */
     fun national(raw: String): String {
@@ -223,7 +227,7 @@ class SpamScreeningService : CallScreeningService() {
         Thread {
             val d = try { SpamEngine.evaluate(ctx, number) } catch (e: Exception) { Decision(SpamStore.ALLOW, "") }
             val key = SpamEngine.national(number)
-            SpamEngine.screenedAt[key] = System.currentTimeMillis()
+            SpamEngine.screened.mark(key)
             if (d.action == SpamStore.ALLOW) SpamEngine.lastReasons.remove(key)
             else {
                 SpamEngine.lastReasons[key] = d.reason
