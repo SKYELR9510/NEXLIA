@@ -252,9 +252,9 @@ void main() {
         await t.pumpAndSettle();
         expect(t.takeException(), isNull);
         // Con texto al 200 % la tarjeta queda más abajo: se desplaza hasta ella.
-        await t.scrollUntilVisible(find.text('Mostrar mis SMS aquí'), 200);
+        await t.scrollUntilVisible(find.text('Mostrar mis SMS aquí'), 200, scrollable: find.byType(Scrollable).first);
         expect(t.takeException(), isNull);
-        await t.scrollUntilVisible(find.text('Ana (prueba)'), 300);
+        await t.scrollUntilVisible(find.text('Ana (prueba)'), 300, scrollable: find.byType(Scrollable).first);
         expect(t.takeException(), isNull);
 
         await t.pumpWidget(app(ChatConversationPage(chat: chat, conversationId: 'demo-equipo'), b: b, scale: 2));

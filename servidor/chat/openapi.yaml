@@ -109,7 +109,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Session' }
-        '401': { description: Token inválido, caducado o reutilizado }
+        '401': { description: 'Token inválido, caducado o reutilizado' }
 
   /v1/auth/logout:
     post:
@@ -498,7 +498,7 @@ components:
       type: object
       required: [error]
       properties:
-        error: { type: string, description: Código estable, p. ej. invalid_phone, rate_limited }
+        error: { type: string, description: 'Código estable, p. ej. invalid_phone o rate_limited' }
         message: { type: string }
     Session:
       type: object
