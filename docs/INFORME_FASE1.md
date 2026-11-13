@@ -119,7 +119,7 @@ servidor/chat/migraciones/    001 (base) y 002 (identidad, sesiones, antiabuso),
 
 ### 6.1 Verificación de la rama (`verificacion.yml`)
 
-Ejecución [43504208729](https://github.com/SKYELR9510/NEXLIA/actions/runs/43504208729), commit `2d4da4c`. Flutter 3.50.0 y Dart 3.14.0.
+Ejecución [43508116305](https://github.com/SKYELR9510/NEXLIA/actions/runs/43508116305), commit `76151f4`, el último que toca código o pruebas; los posteriores solo cambian documentos y capturas. Los mismos resultados se obtuvieron en `2d4da4c` (ejecución [43504208729](https://github.com/SKYELR9510/NEXLIA/actions/runs/43504208729)), que es el código validado en el emulador. Flutter 3.50.0 y Dart 3.14.0.
 
 | Paso | Resultado |
 |---|---|
@@ -213,7 +213,7 @@ En `docs/capturas/fase1/`.
 - `4_vacio_*`: primer uso.
 - `5_texto_grande_*`: texto al 160 %.
 - `6_foco_teclado_*`: foco del teclado sobre una conversación.
-- `7_lector_de_pantalla`: depurador de semántica de Flutter, con un recuadro por nodo.
+- `7_lector_de_pantalla`: depurador de semántica de Flutter, con un recuadro por nodo. Se ve que la tarjeta de SMS tiene un nodo de texto y otro de botón (recuadro amarillo), separados. Las etiquetas salen como bloques porque el depurador usa la fuente de pruebas de Flutter; los textos exactos de cada nodo están en las pruebas de semántica y en las salidas de uiautomator del emulador (§6.3).
 
 **Emulador Android 14:**
 
