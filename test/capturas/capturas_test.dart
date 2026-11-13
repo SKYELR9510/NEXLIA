@@ -46,7 +46,8 @@ Future<void> _loadFonts() async {
   }
   final cfg = jsonDecode(File('.dart_tool/package_config.json').readAsStringSync()) as Map;
   final pkg = (cfg['packages'] as List).cast<Map>().firstWhere((p) => p['name'] == 'cupertino_icons');
-  final base = Uri.parse(pkg['rootUri'] as String);
+  final raw = pkg['rootUri'] as String;
+  final base = Uri.parse(raw.endsWith('/') ? raw : '$raw/');
   final dir = base.isAbsolute ? base : Uri.file('${Directory.current.path}/.dart_tool/').resolveUri(base);
   final icons = FontLoader('packages/cupertino_icons/CupertinoIcons')
     ..addFont(Future.value(read(dir.resolve('assets/CupertinoIcons.ttf').toFilePath())));
