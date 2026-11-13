@@ -9,7 +9,12 @@ permissions:
   contents: write
 
 jobs:
-  apk:
+  # Primero: análisis, pruebas y compilación debug. Si falla, no se publica nada.
+  verificar:
+    uses: ./.github/workflows/verificacion.yml
+
+  publicar:
+    needs: verificar
     runs-on: ubuntu-latest
     env:
       KEYSTORE_B64: ${{ secrets.KEYSTORE_B64 }}
@@ -25,83 +30,22 @@ jobs:
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
+          flutter-version: 3.50.0
 
-      - name: Armar el proyecto Flutter
+      - name: Clave de firma
         run: |
-          mkdir app && cd app
-          flutter create --org com.nexlia --project-name phone --platforms android .
-          flutter pub add video_player
-          cp -r ../lib/* lib/
-          cp ../android/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-          mkdir -p android/app/src/main/kotlin/com/nexlia/phone
-          cp ../android/kotlin/*.kt android/app/src/main/kotlin/com/nexlia/phone/
-          cp -r ../android/res/* android/app/src/main/res/
-          mkdir -p assets && cp ../assets/* assets/
-          sed -i 's|^  uses-material-design: true|  uses-material-design: true\n  assets:\n    - assets/icon.png|' pubspec.yaml
-          rm -f test/widget_test.dart
-          sed -i 's/flutter\.minSdkVersion/29/' android/app/build.gradle*
-          # El analizador "lint" de Android falla dentro del plugin de video; no afecta al APK.
-          if [ -f android/build.gradle.kts ]; then
-            cat >> android/build.gradle.kts <<'KTS'
-
-          subprojects {
-              tasks.configureEach {
-                  if (name.startsWith("lintVital")) { enabled = false }
-              }
-          }
-          KTS
-          else
-            cat >> android/build.gradle <<'GROOVY'
-
-          subprojects {
-              tasks.configureEach { t ->
-                  if (t.name.startsWith("lintVital")) { t.enabled = false }
-              }
-          }
-          GROOVY
-          fi
-          # Firma fija y privada: la clave vive en los secretos del repositorio.
           if [ -z "$KEYSTORE_B64" ] || [ -z "$KEYSTORE_PASS" ]; then
             echo "Faltan los secretos KEYSTORE_B64 y KEYSTORE_PASS del repositorio"; exit 1
           fi
           echo "$KEYSTORE_B64" | base64 -d > android/app/nexlia.keystore
-          if [ -f android/app/build.gradle.kts ]; then
-            cat >> android/app/build.gradle.kts <<'KTS'
-
-          android {
-              signingConfigs {
-                  getByName("debug") {
-                      storeFile = file("nexlia.keystore")
-                      storePassword = System.getenv("KEYSTORE_PASS")
-                      keyAlias = "nexlia"
-                      keyPassword = System.getenv("KEYSTORE_PASS")
-                  }
-              }
-          }
-          KTS
-          else
-            cat >> android/app/build.gradle <<'GROOVY'
-
-          android {
-              signingConfigs {
-                  debug {
-                      storeFile file("nexlia.keystore")
-                      storePassword System.getenv("KEYSTORE_PASS")
-                      keyAlias "nexlia"
-                      keyPassword System.getenv("KEYSTORE_PASS")
-                  }
-              }
-          }
-          GROOVY
-          fi
 
       - name: Compilar
-        working-directory: app
         run: |
+          flutter pub get --enforce-lockfile
           flutter build apk --release \
             --build-name=1.0.${{ github.run_number }} \
             --build-number=${{ github.run_number }}
-          cp build/app/outputs/flutter-apk/app-release.apk ../NEXLIA.apk
+          cp build/app/outputs/flutter-apk/app-release.apk NEXLIA.apk
 
       - name: Comprobar la firma
         run: |

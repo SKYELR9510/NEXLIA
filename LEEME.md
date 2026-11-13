@@ -4,26 +4,42 @@ App: **NEXLIA** (`com.nexlia.phone`). Flutter para la interfaz, Kotlin para llam
 
 ## Instalar
 
-1. Descomprime esta carpeta en tu PC.
-2. Doble clic en `instalar.bat`. Crea el proyecto en `C:\proyectos\nexlia`, copia el código y fija Android 10 como mínimo.
-3. Con el teléfono conectado por USB: `cd C:\proyectos\nexlia` y `flutter run --release`.
-4. Al abrir la app, acepta los permisos y toca **Activar** para dejarla como Teléfono predeterminado. Sin ese paso no recibe llamadas ni bloquea spam.
+**Recomendado:** descarga `NEXLIA.apk` de la última versión en [Releases](https://github.com/SKYELR9510/NEXLIA/releases). Las versiones publicadas se instalan encima de la anterior.
+
+Al abrir la app, acepta los permisos y toca **Activar** para dejarla como Teléfono predeterminado. Sin ese paso no recibe llamadas ni bloquea spam.
+
+## Compilar
+
+El repositorio es un proyecto Flutter completo con versiones fijas:
+
+- Flutter **3.50.0** (Dart 3.14.0), JDK 17.
+- Dependencias exactas en `pubspec.lock`; Gradle 9.5.0, Android Gradle Plugin 9.3.1 y Kotlin 2.4.20 en `android/`.
+
+```
+flutter pub get --enforce-lockfile
+flutter analyze
+flutter test
+flutter build apk --debug
+cd android && ./gradlew :app:testDebugUnitTest
+```
+
+En Windows, `instalar.bat` comprueba la versión de Flutter y descarga las dependencias.
+
+Un APK compilado en la PC se firma con la clave debug local y **no** se instala encima de las releases oficiales.
+
+### CI
+
+- `Verificación` (`.github/workflows/verificacion.yml`): análisis, pruebas Dart y Kotlin, compilación debug y sintaxis PHP en cada rama y Pull Request.
+- `Compilar APK` (`.github/workflows/apk.yml`): en cada push a `main` ejecuta primero la verificación; solo si pasa, compila la release firmada, comprueba el certificado y la publica.
 
 ### Xiaomi (HyperOS)
 En Ajustes > Apps > NEXLIA > Otros permisos, activa **Mostrar en pantalla de bloqueo** y **Abrir ventanas nuevas en segundo plano**, y pon **Sin restricciones** en ahorro de batería. Si no, la pantalla de llamada entrante puede no aparecer con el teléfono bloqueado.
 
 ## Qué trae
 
-- **Teclado**, **Recientes** (todas / perdidas), **Contactos** (buscar, crear, eliminar), **Favoritos**.
-- **Pantalla de llamada** propia: contestar, rechazar, altavoz, silenciar, espera, teclado de tonos.
-- **Spam** (pestaña): 
-  - Desconocidos: permitir, silenciar o rechazar.
-  - Serie 500 de Perú, números ocultos, internacionales.
-  - Prefijos y números bloqueados por ti.
-  - Base en línea propia.
-  - Registro de llamadas filtradas.
-
-Mantén presionada una llamada en Recientes para bloquear o reportar el número.
+- Pestañas **Teléfono** (marcador con sugerencias), **Contactos** (favoritos, índice A–Z), **Recientes** (agrupadas por día), **Buzón** y **Más**.
+- **Pantalla de llamada** propia: contestar, rechazar, rechazar con mensaje, silenciar, teclado, altavoz, agregar, espera, Bluetooth; fondo, video y tono propios.
+- **Bloqueo de llamadas** (Más > Bloqueo de llamadas): desconocidos, serie 500, ocultos, internacionales, prefijos, lista propia, base en línea y registro.
 
 ## Base de datos en línea (carpeta `servidor`)
 
@@ -35,6 +51,8 @@ La base empieza vacía y se llena con los reportes hechos desde la app.
 
 ## Archivos
 
-- `lib/` interfaz (Flutter).
-- `android/kotlin/` llamadas, contactos y motor de spam (`Spam.kt` tiene las reglas, en orden).
-- `android/AndroidManifest.xml` permisos y servicios.
+- `lib/`: interfaz (Flutter). `test/`: pruebas Dart.
+- `android/kotlin/`: llamadas, contactos y motor de spam (`Spam.kt` tiene las reglas, en orden). `android/test/`: pruebas Kotlin.
+- `android/app/src/main/AndroidManifest.xml`: permisos y servicios.
+- `servidor/`: API de spam (PHP + MySQL).
+- `docs/`: arquitectura y auditorías.
