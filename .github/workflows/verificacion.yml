@@ -7,7 +7,7 @@ on:
   push:
     branches-ignore: [main]
   pull_request:
-    branches: [main]
+    branches: [main, feature/fase-1-mensajeria]
   workflow_call:
 
 permissions:
