@@ -41,6 +41,7 @@ class ChatRepository extends ChangeNotifier {
   Future<void> _pendingWrite = Future<void>.value();
   final Map<String, String> _pendingReceipts = {};
   bool _flushingReceipts = false;
+  int _revision = 0;
 
   int get pendingReceiptCount => _pendingReceipts.length;
 
@@ -75,8 +76,11 @@ class ChatRepository extends ChangeNotifier {
   /// Lee una instantánea completa antes de sustituir el estado en memoria.
   /// Un fallo de lectura o JSON inválido no destruye los mensajes ya cargados.
   Future<void> load() async {
+    final startRevision = _revision;
     await _pendingWrite;
     final raw = await store.read(storeKey);
+    // Nunca sustituir cambios locales realizados mientras se esperaba al disco.
+    if (startRevision != _revision) return;
     final nextConversations = <ChatConversation>[];
     final nextMessages = <String, List<ChatMessage>>{};
     final nextReceipts = <String, String>{};
@@ -117,6 +121,7 @@ class ChatRepository extends ChangeNotifier {
 
   /// Serializa instantáneas: una escritura lenta nunca sobrescribe otra posterior.
   Future<void> _save() {
+    _revision++;
     final snapshot = jsonEncode({
       'version': 1,
       'conversations': _conversations.map((c) => c.toJson()).toList(),
