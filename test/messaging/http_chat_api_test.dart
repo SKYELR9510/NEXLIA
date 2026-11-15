@@ -118,6 +118,33 @@ void main() {
     await expectLater(api().listConversations(), throwsA(isA<ChatServerError>()));
   });
 
+
+  test('UTF-8 inválido produce error controlado', () async {
+    handler = (r) async {
+      r.response.add([0xC3, 0x28]);
+      await r.response.close();
+    };
+    await expectLater(api().listConversations(), throwsA(isA<ChatServerError>()));
+  });
+
+  test('fragmentos lentos exceden el plazo total de respuesta', () async {
+    handler = (r) async {
+      r.response.headers.chunkedTransferEncoding = true;
+      r.response.write(' ');
+      await r.response.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+      r.response.write(' ');
+      await r.response.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+      r.response.write('{}');
+      await r.response.close();
+    };
+    await expectLater(
+      api(timeout: const Duration(milliseconds: 300)).listConversations(),
+      throwsA(isA<ChatNetworkError>()),
+    );
+  });
+
   test('sin sesión: falla antes de salir a la red', () async {
     reply(200, {});
     await expectLater(api(token: null).listConversations(), throwsA(isA<ChatAuthError>()));
