@@ -36,3 +36,10 @@ El workflow `verificacion.yml` se ejecuta al hacer push en ramas distintas de `m
 - La recarga conserva el estado actual si la última escritura falló.
 - `flushOutbox()` intenta procesar los recibos pendientes al completar la cola de mensajes.
 - **Bloqueantes de producción:** cifrado en reposo con Android Keystore y migración segura, backend/autenticación funcional, CI aprobada y pruebas en dispositivo. Estos elementos no se consideran implementados ni validados.
+
+## Cifrado local incorporado (pendiente de validación Android)
+- `android/kotlin/ChatSecurePrefs.kt` cifra `chat.store.v1` con AES-256-GCM y una clave no exportable de Android Keystore. El nombre de la preferencia se autentica como AAD.
+- La lectura migra el JSON heredado desde `SharedPreferences("ui")` a `chat_secure_v1`; solo elimina el original tras confirmar el nuevo guardado.
+- La interfaz de Flutter mantiene el mismo contrato; lectura y escritura cifradas se despachan al ejecutor de E/S.
+- **Sin validar:** compilación Kotlin, migración en dispositivos, pérdida de clave tras restauración de copias de seguridad, resistencia a fallos durante migración, rendimiento y compatibilidad con versiones Android.
+- **Antes de producción:** excluir `chat_secure_v1.xml` de Auto Backup / device transfer o implementar una estrategia de restauración que no pierda mensajes. No habilitar Chat real hasta comprobar esta política.
