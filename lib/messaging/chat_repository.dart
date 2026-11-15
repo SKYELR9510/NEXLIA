@@ -86,6 +86,8 @@ class ChatRepository extends ChangeNotifier {
         });
       } catch (_) {
         // Mantener la instantánea anterior; no reemplazarla por datos parciales.
+        loaded = true;
+        notifyListeners();
         return;
       }
     }
