@@ -38,6 +38,7 @@ class ChatRepository extends ChangeNotifier {
   ChatConnection connection;
   bool loaded = false;
   bool _flushing = false;
+  Future<void> _pendingWrite = Future<void>.value();
 
   bool get isConfigured => _api.isConfigured;
 
@@ -70,6 +71,7 @@ class ChatRepository extends ChangeNotifier {
   /// Lee una instantánea completa antes de sustituir el estado en memoria.
   /// Un fallo de lectura o JSON inválido no destruye los mensajes ya cargados.
   Future<void> load() async {
+    await _pendingWrite;
     final raw = await store.read(storeKey);
     final nextConversations = <ChatConversation>[];
     final nextMessages = <String, List<ChatMessage>>{};
@@ -101,14 +103,17 @@ class ChatRepository extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _save() => store.write(
-        storeKey,
-        jsonEncode({
-          'version': 1,
-          'conversations': _conversations.map((c) => c.toJson()).toList(),
-          'messages': _messages.map((k, v) => MapEntry(k, v.map((m) => m.toJson()).toList())),
-        }),
-      );
+  /// Serializa instantáneas: una escritura lenta nunca sobrescribe otra posterior.
+  Future<void> _save() {
+    final snapshot = jsonEncode({
+      'version': 1,
+      'conversations': _conversations.map((c) => c.toJson()).toList(),
+      'messages': _messages.map((k, v) => MapEntry(k, v.map((m) => m.toJson()).toList())),
+    });
+    final write = _pendingWrite.catchError((Object _) {}).then((_) => store.write(storeKey, snapshot));
+    _pendingWrite = write;
+    return write;
+  }
 
   /// Guarda el mensaje como pendiente y luego intenta enviar la cola.
   /// Solo se llama por acción del usuario: no hay envíos automáticos de texto.
