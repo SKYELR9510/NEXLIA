@@ -9,7 +9,7 @@ Esta rama deriva de `feature/fase-1-mensajeria`. No habilita un backend real, no
 - HTTPS obligatorio; HTTP de pruebas solo en loopback (`localhost`, `127.0.0.1`, `::1`).
 - Carga de estado de Chat mediante instantánea temporal: JSON corrupto no elimina conversaciones ya cargadas.
 - Escrituras de Chat serializadas, con espera antes de recargar y prueba de almacenamiento lento.
-- Errores de `Native.setPref` propagados al repositorio, sin declarar éxito cuando falla el guardado.
+- Errores de `Native.setPref` propagados al repositorio; Kotlin usa `commit()` para confirmar el resultado del guardado. **Revisar impacto en hilo principal** antes de fusionar, especialmente con conversaciones grandes.
 - Confirmado en `MainActivity.kt`: `getPref`/`setPref` usan `SharedPreferences("ui")`, sin cifrado de mensajes.
 - Pruebas unitarias para los casos anteriores.
 - Lectura de respuestas con tiempo máximo total (no renovado por fragmento) y manejo explícito de UTF-8 inválido.
@@ -20,7 +20,7 @@ Esta rama deriva de `feature/fase-1-mensajeria`. No habilita un backend real, no
 - Completar protección contra carreras entre cargas y mutaciones concurrentes (las escrituras ya están serializadas).
 - Confirmar almacenamiento nativo: `NativePrefsStore` utiliza `Native.setPref`; no asumir cifrado.
 - Diseñar cifrado en reposo mediante Android Keystore y migración de datos antes de permitir mensajes reales.
-- Implementar cola persistente de recibos de lectura y reintentos.
+- Cola persistente de recibos de lectura implementada, con prueba de reinicio y reintento; falta validación en CI y política de reintento al recuperar conectividad.
 - Probar en dispositivo físico con dos SIM.
 
 ## Riesgos y criterios de integración
@@ -28,3 +28,6 @@ No fusionar sin CI aprobada. No habilitar producción ni almacenar conversacione
 
 ## Evidencia de CI
 El workflow `verificacion.yml` se ejecuta al hacer push en ramas distintas de `main`. La consulta de estados del conector no ha confirmado todavía los resultados de esta rama. No considerar las pruebas aprobadas hasta revisar GitHub Actions.
+
+## Límite de seguridad actual
+`SharedPreferences("ui")` guarda mensajes sin cifrado. No se ha implementado Android Keystore ni migración de datos cifrados. **No conectar una cuenta real ni habilitar Chat en producción** hasta reemplazar esta persistencia y probar recuperación, copia de seguridad y cierre de sesión. La prueba de `commit()` debe medir el bloqueo del hilo principal; considerar migrar a una capa de almacenamiento asíncrona en segundo plano.
