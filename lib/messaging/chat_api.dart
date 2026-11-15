@@ -89,6 +89,7 @@ class HttpChatApi implements ChatApi {
   final String myUserId;
   final Duration timeout;
   final HttpClient _client;
+  static const int maxResponseBytes = 1024 * 1024;
 
   @override
   bool get isConfigured => true;
@@ -107,6 +108,8 @@ class HttpChatApi implements ChatApi {
     late String text;
     try {
       final req = await _client.openUrl(method, _uri(path, query)).timeout(timeout);
+      // No reenviar el token a destinos indicados por redirecciones HTTP.
+      req.followRedirects = false;
       req.headers.set(HttpHeaders.authorizationHeader, 'Bearer $t');
       req.headers.set(HttpHeaders.acceptHeader, 'application/json');
       headers.forEach(req.headers.set);
@@ -115,7 +118,14 @@ class HttpChatApi implements ChatApi {
         req.write(jsonEncode(body));
       }
       res = await req.close().timeout(timeout);
-      text = await res.transform(utf8.decoder).join().timeout(timeout);
+      final bytes = <int>[];
+      await for (final chunk in res.timeout(timeout)) {
+        if (bytes.length + chunk.length > maxResponseBytes) {
+          throw const ChatServerError(0, 'Respuesta del servidor demasiado grande');
+        }
+        bytes.addAll(chunk);
+      }
+      text = utf8.decode(bytes);
     } on TimeoutException {
       throw const ChatNetworkError('Tiempo de espera agotado');
     } on SocketException catch (e) {
@@ -127,6 +137,7 @@ class HttpChatApi implements ChatApi {
     }
 
     final s = res.statusCode;
+    if (s >= 300 && s < 400) throw ChatRejectedError(s, 'Redirección HTTP no permitida');
     if (s == 401) throw const ChatAuthError('Sesión no válida');
     if (s == 429 || s >= 500) throw ChatServerError(s, 'Error temporal del servidor ($s)');
     if (s >= 400) throw ChatRejectedError(s, 'Petición rechazada ($s)');
