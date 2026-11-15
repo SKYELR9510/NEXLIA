@@ -67,27 +67,34 @@ class ChatRepository extends ChangeNotifier {
           .where((m) => m.fromMe && m.status == ChatMessageStatus.pending)
           .length;
 
-  /// Lee lo guardado en el teléfono. Un contenido dañado no bloquea la app.
+  /// Lee una instantánea completa antes de sustituir el estado en memoria.
+  /// Un fallo de lectura o JSON inválido no destruye los mensajes ya cargados.
   Future<void> load() async {
-    _conversations.clear();
-    _messages.clear();
     final raw = await store.read(storeKey);
+    final nextConversations = <ChatConversation>[];
+    final nextMessages = <String, List<ChatMessage>>{};
     if (raw != null && raw.isNotEmpty) {
       try {
         final data = jsonDecode(raw) as Map;
         for (final c in (data['conversations'] as List? ?? const [])) {
-          if (c is Map) _conversations.add(ChatConversation.fromJson(c));
+          if (c is Map) nextConversations.add(ChatConversation.fromJson(c));
         }
         final msgs = (data['messages'] as Map?) ?? const {};
         msgs.forEach((k, v) {
-          _messages[k.toString()] =
+          nextMessages[k.toString()] =
               (v as List? ?? const []).whereType<Map>().map(ChatMessage.fromJson).toList();
         });
       } catch (_) {
-        _conversations.clear();
-        _messages.clear();
+        // Mantener la instantánea anterior; no reemplazarla por datos parciales.
+        return;
       }
     }
+    _conversations
+      ..clear()
+      ..addAll(nextConversations);
+    _messages
+      ..clear()
+      ..addAll(nextMessages);
     loaded = true;
     notifyListeners();
   }
