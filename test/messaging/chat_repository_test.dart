@@ -169,6 +169,27 @@ void main() {
     expect(restored.messagesOf('k1').map((m) => m.text).toList(), ['primero', 'segundo']);
   });
 
+
+  test('recibo fallido se conserva y reintenta después de reiniciar', () async {
+    final api = FakeChatApi()..receiptFailures = 1;
+    final store = MemoryStore();
+    store.data[ChatRepository.storeKey] = '{"version":1,"conversations":[{"id":"k1","peer":{"id":"u","displayName":"P"},'
+        '"updatedAt":"2026-01-01T00:00:00.000Z","unreadCount":1,"isDemo":false}],"messages":{"k1":['
+        '{"clientId":"r1","serverId":"s9","conversationId":"k1","fromMe":false,"text":"hola",'
+        '"createdAt":"2026-01-01T00:00:00.000Z","status":"read","attempts":0,"isDemo":false}]}}';
+    final first = repo(api, store);
+    await first.load();
+    await first.markRead('k1');
+    expect(first.pendingReceiptCount, 1);
+    expect(api.receipts, isEmpty);
+    final restarted = repo(api, store);
+    await restarted.load();
+    expect(restarted.pendingReceiptCount, 1);
+    await restarted.flushReceipts();
+    expect(api.receipts, ['k1:s9:read']);
+    expect(restarted.pendingReceiptCount, 0);
+  });
+
   test('almacén dañado: la app arranca con la bandeja vacía', () async {
     final store = MemoryStore()..data[ChatRepository.storeKey] = '{no es json';
     final r = repo(const UnconfiguredChatApi(), store);
