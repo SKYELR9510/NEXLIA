@@ -12,7 +12,10 @@ class NativePrefsStore implements KeyValueStore {
   @override
   Future<String?> read(String key) => Native.getPref(key);
   @override
-  Future<void> write(String key, String value) => Native.setPref(key, value);
+  Future<void> write(String key, String value) async {
+    final saved = await Native.setPref(key, value);
+    if (!saved) throw StateError('No se pudo guardar la preferencia nativa');
+  }
 }
 
 /// En memoria (pruebas).
