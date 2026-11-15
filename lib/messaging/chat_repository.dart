@@ -77,7 +77,14 @@ class ChatRepository extends ChangeNotifier {
   /// Un fallo de lectura o JSON inválido no destruye los mensajes ya cargados.
   Future<void> load() async {
     final startRevision = _revision;
-    await _pendingWrite;
+    try {
+      await _pendingWrite;
+    } catch (_) {
+      // Una escritura fallida no autoriza a recargar una versión obsoleta.
+      loaded = true;
+      notifyListeners();
+      return;
+    }
     final raw = await store.read(storeKey);
     // Nunca sustituir cambios locales realizados mientras se esperaba al disco.
     if (startRevision != _revision) return;
