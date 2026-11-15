@@ -12,10 +12,11 @@ Esta rama deriva de `feature/fase-1-mensajeria`. No habilita un backend real, no
 - Errores de `Native.setPref` propagados al repositorio, sin declarar éxito cuando falla el guardado.
 - Confirmado en `MainActivity.kt`: `getPref`/`setPref` usan `SharedPreferences("ui")`, sin cifrado de mensajes.
 - Pruebas unitarias para los casos anteriores.
+- Lectura de respuestas con tiempo máximo total (no renovado por fragmento) y manejo explícito de UTF-8 inválido.
 
 ## Pendiente de verificar
 - Ejecutar CI completa y revisar los resultados; no se declara aprobación de pruebas.
-- Revisar el tratamiento de tiempos agotados durante respuestas parciales y errores de decodificación UTF-8.
+- Confirmar en CI las nuevas pruebas de timeout total y UTF-8 inválido; cambios implementados, sin ejecución local de Flutter.
 - Completar protección contra carreras entre cargas y mutaciones concurrentes (las escrituras ya están serializadas).
 - Confirmar almacenamiento nativo: `NativePrefsStore` utiliza `Native.setPref`; no asumir cifrado.
 - Diseñar cifrado en reposo mediante Android Keystore y migración de datos antes de permitir mensajes reales.
@@ -24,3 +25,6 @@ Esta rama deriva de `feature/fase-1-mensajeria`. No habilita un backend real, no
 
 ## Riesgos y criterios de integración
 No fusionar sin CI aprobada. No habilitar producción ni almacenar conversaciones reales hasta revisar privacidad, autenticación, gestión de sesiones, cifrado local y recuperación ante fallos.
+
+## Evidencia de CI
+El workflow `verificacion.yml` se ejecuta al hacer push en ramas distintas de `main`. La consulta de estados del conector no ha confirmado todavía los resultados de esta rama. No considerar las pruebas aprobadas hasta revisar GitHub Actions.
