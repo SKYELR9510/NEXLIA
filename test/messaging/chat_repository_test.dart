@@ -1,4 +1,6 @@
 // Repositorio de NEXLIA Chat: cola de pendientes, errores de red, persistencia y prueba.
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phone/messaging/chat_api.dart';
 import 'package:phone/messaging/chat_repository.dart';
@@ -148,6 +150,25 @@ void main() {
     expect(r.messagesOf('k1').single.text, 'mensaje conservado');
   });
 
+
+  test('las escrituras se serializan incluso con almacenamiento lento', () async {
+    final store = _SlowStore();
+    final r = await withConversation(const UnconfiguredChatApi(), store);
+    final first = r.send('k1', 'primero');
+    await Future<void>.delayed(Duration.zero);
+    final second = r.send('k1', 'segundo');
+    await Future<void>.delayed(Duration.zero);
+    expect(store.pending.length, 1);
+    store.completeNext();
+    await Future<void>.delayed(Duration.zero);
+    expect(store.pending.length, 1);
+    store.completeNext();
+    await Future.wait([first, second]);
+    final restored = repo(const UnconfiguredChatApi(), store);
+    await restored.load();
+    expect(restored.messagesOf('k1').map((m) => m.text).toList(), ['primero', 'segundo']);
+  });
+
   test('almacén dañado: la app arranca con la bandeja vacía', () async {
     final store = MemoryStore()..data[ChatRepository.storeKey] = '{no es json';
     final r = repo(const UnconfiguredChatApi(), store);
@@ -160,3 +181,19 @@ void main() {
 String _json(ChatConversation c) =>
     '{"id":"${c.id}","peer":{"id":"${c.peer.id}","displayName":"${c.peer.displayName}"},'
     '"updatedAt":"${c.updatedAt.toIso8601String()}","unreadCount":0,"isDemo":${c.isDemo}}';
+
+class _SlowStore extends MemoryStore {
+  final pending = <Completer<void>>[];
+
+  @override
+  Future<void> write(String key, String value) async {
+    final gate = Completer<void>();
+    pending.add(gate);
+    await gate.future;
+    data[key] = value;
+  }
+
+  void completeNext() {
+    pending.removeAt(0).complete();
+  }
+}
