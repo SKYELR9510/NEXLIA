@@ -136,6 +136,18 @@ void main() {
     expect(api.receipts, ['k1:s9:read']);
   });
 
+
+  test('recarga con JSON corrupto conserva conversaciones y mensajes existentes', () async {
+    final store = MemoryStore();
+    final r = await withConversation(const UnconfiguredChatApi(), store);
+    await r.send('k1', 'mensaje conservado');
+    store.data[ChatRepository.storeKey] = '{corrupto';
+    await r.load();
+    expect(r.loaded, isTrue);
+    expect(r.conversation('k1'), isNotNull);
+    expect(r.messagesOf('k1').single.text, 'mensaje conservado');
+  });
+
   test('almacén dañado: la app arranca con la bandeja vacía', () async {
     final store = MemoryStore()..data[ChatRepository.storeKey] = '{no es json';
     final r = repo(const UnconfiguredChatApi(), store);
