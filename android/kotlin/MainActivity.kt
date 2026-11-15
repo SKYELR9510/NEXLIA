@@ -241,9 +241,17 @@ class MainActivity : FlutterActivity() {
             "getPref" -> result.success(
                 getSharedPreferences("ui", MODE_PRIVATE).getString(call.argument<String>("key") ?: "", null))
             "setPref" -> {
-                val saved = getSharedPreferences("ui", MODE_PRIVATE).edit()
-                    .putString(call.argument<String>("key") ?: "", call.argument<String>("value")).commit()
-                result.success(saved)
+                val key = call.argument<String>("key") ?: ""
+                val value = call.argument<String>("value")
+                io.execute {
+                    try {
+                        val saved = getSharedPreferences("ui", MODE_PRIVATE).edit()
+                            .putString(key, value).commit()
+                        runOnUiThread { result.success(saved) }
+                    } catch (e: Exception) {
+                        runOnUiThread { result.error("pref_write_failed", e.message, null) }
+                    }
+                }
             }
             "getVersion" -> result.success(packageManager.getPackageInfo(packageName, 0).versionName ?: "")
             "callVoicemail" -> {
