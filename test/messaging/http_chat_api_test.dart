@@ -138,4 +138,23 @@ void main() {
     await expectLater(api(timeout: const Duration(milliseconds: 300)).listConversations(),
         throwsA(isA<ChatNetworkError>()));
   });
+  test('rechaza redirecciones sin enviar el token a otro destino', () async {
+    handler = (r) async {
+      r.response.statusCode = HttpStatus.found;
+      r.response.headers.set(HttpHeaders.locationHeader, 'https://example.invalid/collect');
+      await r.response.close();
+    };
+    await expectLater(api().listConversations(), throwsA(isA<ChatRejectedError>()));
+    expect(seen.length, 1);
+  });
+
+  test('rechaza respuestas mayores a 1 MiB', () async {
+    handler = (r) async {
+      r.response.headers.contentType = ContentType.json;
+      r.response.write('x' * (HttpChatApi.maxResponseBytes + 1));
+      await r.response.close();
+    };
+    await expectLater(api().listConversations(), throwsA(isA<ChatServerError>()));
+  });
+
 }
