@@ -49,3 +49,13 @@ El workflow `verificacion.yml` se ejecuta al hacer push en ramas distintas de `m
 - Se excluyen `chat_secure_v1.xml` y `ui.xml` tanto de copias en nube como de transferencia de dispositivo para evitar restaurar textos sin una clave Keystore compatible y evitar filtrar mensajes legados.
 - **Impacto funcional:** la exclusión de `ui.xml` también impide restaurar preferencias no relacionadas con Chat; separar datos legados o migrar preferencias a otro archivo antes de una release.
 - No se ha compilado ni probado el comportamiento de respaldo/restauración en dispositivo.
+
+## Plan de cierre ejecutable (15 de noviembre de 2026)
+1. **CI:** se habilitó el disparador `pull_request` hacia `feature/fase-1-mensajeria`; confirmar ejecución de Flutter analyze/test, compilación APK y pruebas Kotlin antes de fusionar.
+2. **Almacenamiento:** ejecutar pruebas reales de migración de `ui.xml` a AES-GCM, reinicio, clave Keystore perdida y respaldo/transferencia; verificar que las exclusiones no causen pérdida inesperada de otras preferencias.
+3. **Backend:** implementar un servicio autenticado que cumpla el contrato de `HttpChatApi` (`v1/conversations`, mensajes, recibos), autorización por participante, idempotencia, límites de tamaño, TLS, controles de abuso y pruebas de integración. No usar tokens de compilación en producción.
+4. **Identidad:** implementar alta e inicio de sesión y almacenamiento/renovación de credenciales; conectar el proveedor de tokens a `ChatConfig.api()`. Sin credenciales/infraestructura no se puede habilitar el chat real.
+5. **Cliente:** probar sincronización tras reinicios, envío concurrente, reconexión, duplicados, errores de autenticación, recibos y pérdida de conexión.
+6. **Entrega:** tras CI y pruebas físicas, revisar PR #9 y PR #8, generar APK firmada con secretos existentes, instalar en dispositivo de prueba y validar llamadas y doble SIM antes de integrar a `main`.
+
+**Estado:** trabajo de desarrollo parcial; no afirmar finalización ni publicación hasta tener resultados verificables de CI y pruebas Android.
