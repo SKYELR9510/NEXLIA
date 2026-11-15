@@ -120,13 +120,14 @@ class HttpChatApi implements ChatApi {
       }
       res = await req.close().timeout(timeout);
       final bytes = <int>[];
-      // Un único plazo para toda la respuesta; cada fragmento no reinicia el reloj.
-      await for (final chunk in res.timeout(timeout)) {
-        if (bytes.length + chunk.length > maxResponseBytes) {
+      // Un único plazo para toda la respuesta, incluso si llegan fragmentos lentos.
+      await res.fold<List<int>>(bytes, (buffer, chunk) {
+        if (buffer.length + chunk.length > maxResponseBytes) {
           throw const ChatServerError(0, 'Respuesta del servidor demasiado grande');
         }
-        bytes.addAll(chunk);
-      }
+        buffer.addAll(chunk);
+        return buffer;
+      }).timeout(timeout);
       try {
         text = utf8.decode(bytes);
       } on FormatException {
