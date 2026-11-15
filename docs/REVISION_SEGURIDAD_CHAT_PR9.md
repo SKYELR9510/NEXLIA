@@ -43,3 +43,9 @@ El workflow `verificacion.yml` se ejecuta al hacer push en ramas distintas de `m
 - La interfaz de Flutter mantiene el mismo contrato; lectura y escritura cifradas se despachan al ejecutor de E/S.
 - **Sin validar:** compilación Kotlin, migración en dispositivos, pérdida de clave tras restauración de copias de seguridad, resistencia a fallos durante migración, rendimiento y compatibilidad con versiones Android.
 - **Antes de producción:** excluir `chat_secure_v1.xml` de Auto Backup / device transfer o implementar una estrategia de restauración que no pierda mensajes. No habilitar Chat real hasta comprobar esta política.
+
+## Política de respaldo Android incorporada
+- AndroidManifest referencia `@xml/nexlia_backup_rules` y `@xml/nexlia_data_extraction_rules`.
+- Se excluyen `chat_secure_v1.xml` y `ui.xml` tanto de copias en nube como de transferencia de dispositivo para evitar restaurar textos sin una clave Keystore compatible y evitar filtrar mensajes legados.
+- **Impacto funcional:** la exclusión de `ui.xml` también impide restaurar preferencias no relacionadas con Chat; separar datos legados o migrar preferencias a otro archivo antes de una release.
+- No se ha compilado ni probado el comportamiento de respaldo/restauración en dispositivo.
