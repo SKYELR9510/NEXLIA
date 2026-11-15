@@ -31,3 +31,8 @@ El workflow `verificacion.yml` se ejecuta al hacer push en ramas distintas de `m
 
 ## Límite de seguridad actual
 `SharedPreferences("ui")` guarda mensajes sin cifrado. No se ha implementado Android Keystore ni migración de datos cifrados. **No conectar una cuenta real ni habilitar Chat en producción** hasta reemplazar esta persistencia y probar recuperación, copia de seguridad y cierre de sesión. La escritura `commit()` ya se despacha al ejecutor de E/S; verificar latencia y consumo de memoria con conversaciones grandes.
+
+## Ajustes posteriores
+- La recarga conserva el estado actual si la última escritura falló.
+- `flushOutbox()` intenta procesar los recibos pendientes al completar la cola de mensajes.
+- **Bloqueantes de producción:** cifrado en reposo con Android Keystore y migración segura, backend/autenticación funcional, CI aprobada y pruebas en dispositivo. Estos elementos no se consideran implementados ni validados.
