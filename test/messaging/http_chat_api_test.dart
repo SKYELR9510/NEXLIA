@@ -53,6 +53,18 @@ void main() {
         isTrue);
   });
 
+  test('HTTP de pruebas se limita a loopback', () {
+    expect(
+      () => HttpChatApi(
+        baseUrl: Uri.parse('http://example.invalid'),
+        token: () async => 't',
+        myUserId: 'x',
+        allowInsecureHttp: true,
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('sin servidor configurado no hay red: error "sin configurar"', () async {
     expect(ChatConfig.serverUrl, isEmpty);
     expect(ChatConfig.api().isConfigured, isFalse);
