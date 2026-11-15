@@ -241,9 +241,9 @@ class MainActivity : FlutterActivity() {
             "getPref" -> result.success(
                 getSharedPreferences("ui", MODE_PRIVATE).getString(call.argument<String>("key") ?: "", null))
             "setPref" -> {
-                getSharedPreferences("ui", MODE_PRIVATE).edit()
-                    .putString(call.argument<String>("key") ?: "", call.argument<String>("value")).apply()
-                result.success(true)
+                val saved = getSharedPreferences("ui", MODE_PRIVATE).edit()
+                    .putString(call.argument<String>("key") ?: "", call.argument<String>("value")).commit()
+                result.success(saved)
             }
             "getVersion" -> result.success(packageManager.getPackageInfo(packageName, 0).versionName ?: "")
             "callVoicemail" -> {
