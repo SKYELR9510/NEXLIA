@@ -212,6 +212,8 @@ class ChatRepository extends ChangeNotifier {
       _flushing = false;
       notifyListeners();
     }
+    // La cola de recibos se procesa independientemente de la cola de mensajes.
+    await flushReceipts();
   }
 
   /// "Reintentar" en un mensaje fallido.
