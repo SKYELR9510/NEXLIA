@@ -238,15 +238,32 @@ class MainActivity : FlutterActivity() {
                 result.success(true)
             }
             "takeDialNumber" -> { result.success(dialNumber); dialNumber = null }
-            "getPref" -> result.success(
-                getSharedPreferences("ui", MODE_PRIVATE).getString(call.argument<String>("key") ?: "", null))
+            "getPref" -> {
+                val key = call.argument<String>("key") ?: ""
+                if (key == "chat.store.v1") {
+                    io.execute {
+                        try {
+                            val value = ChatSecurePrefs(applicationContext).read(key)
+                            runOnUiThread { result.success(value) }
+                        } catch (e: Exception) {
+                            runOnUiThread { result.error("chat_decrypt_failed", "No se pudo leer el chat cifrado", null) }
+                        }
+                    }
+                } else {
+                    result.success(getSharedPreferences("ui", MODE_PRIVATE).getString(key, null))
+                }
+            }
             "setPref" -> {
                 val key = call.argument<String>("key") ?: ""
                 val value = call.argument<String>("value")
                 io.execute {
                     try {
-                        val saved = getSharedPreferences("ui", MODE_PRIVATE).edit()
-                            .putString(key, value).commit()
+                        val saved = if (key == "chat.store.v1") {
+                            ChatSecurePrefs(applicationContext).write(key, value ?: "")
+                        } else {
+                            getSharedPreferences("ui", MODE_PRIVATE).edit()
+                                .putString(key, value).commit()
+                        }
                         runOnUiThread { result.success(saved) }
                     } catch (e: Exception) {
                         runOnUiThread { result.error("pref_write_failed", e.message, null) }
