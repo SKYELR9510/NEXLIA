@@ -190,6 +190,19 @@ void main() {
     expect(restarted.pendingReceiptCount, 0);
   });
 
+
+  test('una carga antigua no pisa un mensaje creado durante la lectura', () async {
+    final store = _DelayedReadStore();
+    final r = await withConversation(const UnconfiguredChatApi(), store);
+    store.delayNextRead = true;
+    final loading = r.load();
+    await Future<void>.delayed(Duration.zero);
+    await r.send('k1', 'mensaje nuevo');
+    store.releaseRead();
+    await loading;
+    expect(r.messagesOf('k1').single.text, 'mensaje nuevo');
+  });
+
   test('almacén dañado: la app arranca con la bandeja vacía', () async {
     final store = MemoryStore()..data[ChatRepository.storeKey] = '{no es json';
     final r = repo(const UnconfiguredChatApi(), store);
@@ -217,4 +230,22 @@ class _SlowStore extends MemoryStore {
   void completeNext() {
     pending.removeAt(0).complete();
   }
+}
+
+class _DelayedReadStore extends MemoryStore {
+  bool delayNextRead = false;
+  Completer<void>? _gate;
+  String? _snapshot;
+
+  @override
+  Future<String?> read(String key) async {
+    if (!delayNextRead) return super.read(key);
+    delayNextRead = false;
+    _snapshot = data[key];
+    _gate = Completer<void>();
+    await _gate!.future;
+    return _snapshot;
+  }
+
+  void releaseRead() => _gate!.complete();
 }
