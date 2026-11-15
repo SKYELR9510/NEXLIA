@@ -53,6 +53,18 @@ void main() {
         isTrue);
   });
 
+  test('HTTP de pruebas se limita a loopback', () {
+    expect(
+      () => HttpChatApi(
+        baseUrl: Uri.parse('http://example.invalid'),
+        token: () async => 't',
+        myUserId: 'x',
+        allowInsecureHttp: true,
+      ),
+      throwsArgumentError,
+    );
+  });
+
   test('sin servidor configurado no hay red: error "sin configurar"', () async {
     expect(ChatConfig.serverUrl, isEmpty);
     expect(ChatConfig.api().isConfigured, isFalse);
@@ -106,6 +118,33 @@ void main() {
     await expectLater(api().listConversations(), throwsA(isA<ChatServerError>()));
   });
 
+
+  test('UTF-8 inválido produce error controlado', () async {
+    handler = (r) async {
+      r.response.add([0xC3, 0x28]);
+      await r.response.close();
+    };
+    await expectLater(api().listConversations(), throwsA(isA<ChatServerError>()));
+  });
+
+  test('fragmentos lentos exceden el plazo total de respuesta', () async {
+    handler = (r) async {
+      r.response.headers.chunkedTransferEncoding = true;
+      r.response.write(' ');
+      await r.response.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+      r.response.write(' ');
+      await r.response.flush();
+      await Future<void>.delayed(const Duration(milliseconds: 220));
+      r.response.write('{}');
+      await r.response.close();
+    };
+    await expectLater(
+      api(timeout: const Duration(milliseconds: 300)).listConversations(),
+      throwsA(isA<ChatNetworkError>()),
+    );
+  });
+
   test('sin sesión: falla antes de salir a la red', () async {
     reply(200, {});
     await expectLater(api(token: null).listConversations(), throwsA(isA<ChatAuthError>()));
@@ -138,4 +177,23 @@ void main() {
     await expectLater(api(timeout: const Duration(milliseconds: 300)).listConversations(),
         throwsA(isA<ChatNetworkError>()));
   });
+  test('rechaza redirecciones sin enviar el token a otro destino', () async {
+    handler = (r) async {
+      r.response.statusCode = HttpStatus.found;
+      r.response.headers.set(HttpHeaders.locationHeader, 'https://example.invalid/collect');
+      await r.response.close();
+    };
+    await expectLater(api().listConversations(), throwsA(isA<ChatRejectedError>()));
+    expect(seen.length, 1);
+  });
+
+  test('rechaza respuestas mayores a 1 MiB', () async {
+    handler = (r) async {
+      r.response.headers.contentType = ContentType.json;
+      r.response.write('x' * (HttpChatApi.maxResponseBytes + 1));
+      await r.response.close();
+    };
+    await expectLater(api().listConversations(), throwsA(isA<ChatServerError>()));
+  });
+
 }

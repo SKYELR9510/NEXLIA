@@ -38,6 +38,12 @@ class ChatRepository extends ChangeNotifier {
   ChatConnection connection;
   bool loaded = false;
   bool _flushing = false;
+  Future<void> _pendingWrite = Future<void>.value();
+  final Map<String, String> _pendingReceipts = {};
+  bool _flushingReceipts = false;
+  int _revision = 0;
+
+  int get pendingReceiptCount => _pendingReceipts.length;
 
   bool get isConfigured => _api.isConfigured;
 
@@ -67,39 +73,72 @@ class ChatRepository extends ChangeNotifier {
           .where((m) => m.fromMe && m.status == ChatMessageStatus.pending)
           .length;
 
-  /// Lee lo guardado en el teléfono. Un contenido dañado no bloquea la app.
+  /// Lee una instantánea completa antes de sustituir el estado en memoria.
+  /// Un fallo de lectura o JSON inválido no destruye los mensajes ya cargados.
   Future<void> load() async {
-    _conversations.clear();
-    _messages.clear();
+    final startRevision = _revision;
+    try {
+      await _pendingWrite;
+    } catch (_) {
+      // Una escritura fallida no autoriza a recargar una versión obsoleta.
+      loaded = true;
+      notifyListeners();
+      return;
+    }
     final raw = await store.read(storeKey);
+    // Nunca sustituir cambios locales realizados mientras se esperaba al disco.
+    if (startRevision != _revision) return;
+    final nextConversations = <ChatConversation>[];
+    final nextMessages = <String, List<ChatMessage>>{};
+    final nextReceipts = <String, String>{};
     if (raw != null && raw.isNotEmpty) {
       try {
         final data = jsonDecode(raw) as Map;
         for (final c in (data['conversations'] as List? ?? const [])) {
-          if (c is Map) _conversations.add(ChatConversation.fromJson(c));
+          if (c is Map) nextConversations.add(ChatConversation.fromJson(c));
         }
+        final receipts = (data['pendingReceipts'] as Map?) ?? const {};
+        receipts.forEach((k, v) {
+          if (v is String && v.isNotEmpty) nextReceipts[k.toString()] = v;
+        });
         final msgs = (data['messages'] as Map?) ?? const {};
         msgs.forEach((k, v) {
-          _messages[k.toString()] =
+          nextMessages[k.toString()] =
               (v as List? ?? const []).whereType<Map>().map(ChatMessage.fromJson).toList();
         });
       } catch (_) {
-        _conversations.clear();
-        _messages.clear();
+        // Mantener la instantánea anterior; no reemplazarla por datos parciales.
+        loaded = true;
+        notifyListeners();
+        return;
       }
     }
+    _conversations
+      ..clear()
+      ..addAll(nextConversations);
+    _messages
+      ..clear()
+      ..addAll(nextMessages);
+    _pendingReceipts
+      ..clear()
+      ..addAll(nextReceipts);
     loaded = true;
     notifyListeners();
   }
 
-  Future<void> _save() => store.write(
-        storeKey,
-        jsonEncode({
-          'version': 1,
-          'conversations': _conversations.map((c) => c.toJson()).toList(),
-          'messages': _messages.map((k, v) => MapEntry(k, v.map((m) => m.toJson()).toList())),
-        }),
-      );
+  /// Serializa instantáneas: una escritura lenta nunca sobrescribe otra posterior.
+  Future<void> _save() {
+    _revision++;
+    final snapshot = jsonEncode({
+      'version': 1,
+      'conversations': _conversations.map((c) => c.toJson()).toList(),
+      'messages': _messages.map((k, v) => MapEntry(k, v.map((m) => m.toJson()).toList())),
+      'pendingReceipts': Map<String, String>.of(_pendingReceipts),
+    });
+    final write = _pendingWrite.catchError((Object _) {}).then((_) => store.write(storeKey, snapshot));
+    _pendingWrite = write;
+    return write;
+  }
 
   /// Guarda el mensaje como pendiente y luego intenta enviar la cola.
   /// Solo se llama por acción del usuario: no hay envíos automáticos de texto.
@@ -173,6 +212,8 @@ class ChatRepository extends ChangeNotifier {
       _flushing = false;
       notifyListeners();
     }
+    // La cola de recibos se procesa independientemente de la cola de mensajes.
+    await flushReceipts();
   }
 
   /// "Reintentar" en un mensaje fallido.
@@ -188,29 +229,44 @@ class ChatRepository extends ChangeNotifier {
     await flushOutbox();
   }
 
-  /// Al abrir la conversación: no leídos a cero y, con servidor, recibo de lectura.
+  /// Reintenta recibos de lectura persistidos sin afectar a los mensajes.
+  Future<void> flushReceipts() async {
+    if (_flushingReceipts || !_api.isConfigured || _pendingReceipts.isEmpty) return;
+    _flushingReceipts = true;
+    try {
+      for (final entry in Map<String, String>.of(_pendingReceipts).entries) {
+        try {
+          await _api.sendReceipt(entry.key, entry.value, 'read');
+          if (_pendingReceipts[entry.key] == entry.value) {
+            _pendingReceipts.remove(entry.key);
+            await _save();
+          }
+        } on ChatError {
+          break;
+        }
+      }
+    } finally {
+      _flushingReceipts = false;
+      notifyListeners();
+    }
+  }
+
+  /// Al abrir la conversación: guardar el recibo antes de intentar enviarlo.
   Future<void> markRead(String conversationId) async {
     final conv = conversation(conversationId);
     if (conv == null || conv.unreadCount == 0) return;
     conv.unreadCount = 0;
-    await _save();
-    notifyListeners();
     if (!conv.isDemo && _api.isConfigured) {
-      String? upTo;
       for (final m in messagesOf(conversationId).reversed) {
         if (!m.fromMe && m.serverId != null) {
-          upTo = m.serverId;
+          _pendingReceipts[conversationId] = m.serverId!;
           break;
         }
       }
-      if (upTo != null) {
-        try {
-          await _api.sendReceipt(conversationId, upTo, 'read');
-        } on ChatError {
-          // El recibo es informativo: si falla, no afecta a la conversación.
-        }
-      }
     }
+    await _save();
+    notifyListeners();
+    await flushReceipts();
   }
 
   /// Datos de prueba, claramente marcados. Nunca se envían al servidor.

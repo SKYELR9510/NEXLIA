@@ -1,4 +1,6 @@
 // Repositorio de NEXLIA Chat: cola de pendientes, errores de red, persistencia y prueba.
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:phone/messaging/chat_api.dart';
 import 'package:phone/messaging/chat_repository.dart';
@@ -136,6 +138,71 @@ void main() {
     expect(api.receipts, ['k1:s9:read']);
   });
 
+
+  test('recarga con JSON corrupto conserva conversaciones y mensajes existentes', () async {
+    final store = MemoryStore();
+    final r = await withConversation(const UnconfiguredChatApi(), store);
+    await r.send('k1', 'mensaje conservado');
+    store.data[ChatRepository.storeKey] = '{corrupto';
+    await r.load();
+    expect(r.loaded, isTrue);
+    expect(r.conversation('k1'), isNotNull);
+    expect(r.messagesOf('k1').single.text, 'mensaje conservado');
+  });
+
+
+  test('las escrituras se serializan incluso con almacenamiento lento', () async {
+    final store = _SlowStore();
+    final r = await withConversation(const UnconfiguredChatApi(), store);
+    final first = r.send('k1', 'primero');
+    await Future<void>.delayed(Duration.zero);
+    final second = r.send('k1', 'segundo');
+    await Future<void>.delayed(Duration.zero);
+    expect(store.pending.length, 1);
+    store.completeNext();
+    await Future<void>.delayed(Duration.zero);
+    expect(store.pending.length, 1);
+    store.completeNext();
+    await Future.wait([first, second]);
+    final restored = repo(const UnconfiguredChatApi(), store);
+    await restored.load();
+    expect(restored.messagesOf('k1').map((m) => m.text).toList(), ['primero', 'segundo']);
+  });
+
+
+  test('recibo fallido se conserva y reintenta después de reiniciar', () async {
+    final api = FakeChatApi()..receiptFailures = 1;
+    final store = MemoryStore();
+    store.data[ChatRepository.storeKey] = '{"version":1,"conversations":[{"id":"k1","peer":{"id":"u","displayName":"P"},'
+        '"updatedAt":"2026-01-01T00:00:00.000Z","unreadCount":1,"isDemo":false}],"messages":{"k1":['
+        '{"clientId":"r1","serverId":"s9","conversationId":"k1","fromMe":false,"text":"hola",'
+        '"createdAt":"2026-01-01T00:00:00.000Z","status":"read","attempts":0,"isDemo":false}]}}';
+    final first = repo(api, store);
+    await first.load();
+    await first.markRead('k1');
+    expect(first.pendingReceiptCount, 1);
+    expect(api.receipts, isEmpty);
+    final restarted = repo(api, store);
+    await restarted.load();
+    expect(restarted.pendingReceiptCount, 1);
+    await restarted.flushReceipts();
+    expect(api.receipts, ['k1:s9:read']);
+    expect(restarted.pendingReceiptCount, 0);
+  });
+
+
+  test('una carga antigua no pisa un mensaje creado durante la lectura', () async {
+    final store = _DelayedReadStore();
+    final r = await withConversation(const UnconfiguredChatApi(), store);
+    store.delayNextRead = true;
+    final loading = r.load();
+    await Future<void>.delayed(Duration.zero);
+    await r.send('k1', 'mensaje nuevo');
+    store.releaseRead();
+    await loading;
+    expect(r.messagesOf('k1').single.text, 'mensaje nuevo');
+  });
+
   test('almacén dañado: la app arranca con la bandeja vacía', () async {
     final store = MemoryStore()..data[ChatRepository.storeKey] = '{no es json';
     final r = repo(const UnconfiguredChatApi(), store);
@@ -148,3 +215,37 @@ void main() {
 String _json(ChatConversation c) =>
     '{"id":"${c.id}","peer":{"id":"${c.peer.id}","displayName":"${c.peer.displayName}"},'
     '"updatedAt":"${c.updatedAt.toIso8601String()}","unreadCount":0,"isDemo":${c.isDemo}}';
+
+class _SlowStore extends MemoryStore {
+  final pending = <Completer<void>>[];
+
+  @override
+  Future<void> write(String key, String value) async {
+    final gate = Completer<void>();
+    pending.add(gate);
+    await gate.future;
+    data[key] = value;
+  }
+
+  void completeNext() {
+    pending.removeAt(0).complete();
+  }
+}
+
+class _DelayedReadStore extends MemoryStore {
+  bool delayNextRead = false;
+  Completer<void>? _gate;
+  String? _snapshot;
+
+  @override
+  Future<String?> read(String key) async {
+    if (!delayNextRead) return super.read(key);
+    delayNextRead = false;
+    _snapshot = data[key];
+    _gate = Completer<void>();
+    await _gate!.future;
+    return _snapshot;
+  }
+
+  void releaseRead() => _gate!.complete();
+}

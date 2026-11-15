@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- La clave del Android Keystore no se restaura con los datos. -->
+    <exclude domain="sharedpref" path="chat_secure_v1.xml"/>
+    <exclude domain="sharedpref" path="ui.xml"/>
+</full-backup-content>

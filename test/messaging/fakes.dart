@@ -9,6 +9,7 @@ class FakeChatApi implements ChatApi {
   final List<Object> sendResults = [];
   final List<String> sentClientIds = [];
   final List<String> receipts = [];
+  int receiptFailures = 0;
 
   @override
   bool get isConfigured => true;
@@ -37,6 +38,10 @@ class FakeChatApi implements ChatApi {
 
   @override
   Future<void> sendReceipt(String conversationId, String upToMessageId, String kind) async {
+    if (receiptFailures > 0) {
+      receiptFailures--;
+      throw const ChatNetworkError('sin conexión de prueba');
+    }
     receipts.add('$conversationId:$upToMessageId:$kind');
   }
 }
