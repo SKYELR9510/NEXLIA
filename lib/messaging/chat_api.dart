@@ -79,8 +79,9 @@ class HttpChatApi implements ChatApi {
     bool allowInsecureHttp = false,
     HttpClient? client,
   }) : _client = client ?? HttpClient() {
-    if (baseUrl.scheme != 'https' && !allowInsecureHttp) {
-      throw ArgumentError('NEXLIA Chat exige HTTPS: $baseUrl');
+    final loopback = baseUrl.host == '127.0.0.1' || baseUrl.host == '::1' || baseUrl.host == 'localhost';
+    if (baseUrl.scheme != 'https' && !(allowInsecureHttp && baseUrl.scheme == 'http' && loopback)) {
+      throw ArgumentError('NEXLIA Chat exige HTTPS; HTTP solo se permite en loopback para pruebas');
     }
   }
 
