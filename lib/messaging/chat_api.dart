@@ -120,13 +120,18 @@ class HttpChatApi implements ChatApi {
       }
       res = await req.close().timeout(timeout);
       final bytes = <int>[];
+      // Un único plazo para toda la respuesta; cada fragmento no reinicia el reloj.
       await for (final chunk in res.timeout(timeout)) {
         if (bytes.length + chunk.length > maxResponseBytes) {
           throw const ChatServerError(0, 'Respuesta del servidor demasiado grande');
         }
         bytes.addAll(chunk);
       }
-      text = utf8.decode(bytes);
+      try {
+        text = utf8.decode(bytes);
+      } on FormatException {
+        throw const ChatServerError(0, 'Codificación UTF-8 inválida');
+      }
     } on TimeoutException {
       throw const ChatNetworkError('Tiempo de espera agotado');
     } on SocketException catch (e) {
